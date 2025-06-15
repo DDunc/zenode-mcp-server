@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: zenode-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"  # Expose on 6380 to avoid conflicts with other Redis instances
+    volumes:
+      - redis-data:/data
+    networks:
+      - zenode-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zenode-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zenode-mcp-server:latest
+    container_name: zenode-server
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - NODE_ENV=production
+      - MCP_WORKSPACE=/workspace
+    volumes:
+      - ${MCP_WORKSPACE:-./workspace}:/workspace:ro
+      - zenode-logs:/tmp
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - zenode-network
+    stdin_open: true
+    tty: true
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  log-monitor:
+    image: busybox:latest
+    container_name: zenode-log-monitor
+    restart: unless-stopped
+    command: tail -f /logs/zenode_mcp_server*.log /logs/zenode_mcp_activity*.log
+    volumes:
+      - zenode-logs:/logs:ro
+    depends_on:
+      - zenode-server
+    networks:
+      - zenode-network
+
+volumes:
+  redis-data:
+    driver: local
+  zenode-logs:
+    driver: local
+
+networks:
+  zenode-network:
+    driver: bridge

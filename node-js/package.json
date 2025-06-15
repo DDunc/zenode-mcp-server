@@ -1,0 +1,67 @@
+{
+  "name": "zenode-mcp-server",
+  "version": "1.0.0",
+  "description": "Node.js implementation of the Model Context Protocol (MCP) server that orchestrates multiple AI models",
+  "main": "dist/index.js",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rimraf dist",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "lint": "eslint 'src/**/*.{ts,tsx}'",
+    "lint:fix": "eslint 'src/**/*.{ts,tsx}' --fix",
+    "format": "prettier --write 'src/**/*.{ts,tsx,json,md}'",
+    "format:check": "prettier --check 'src/**/*.{ts,tsx,json,md}'",
+    "type-check": "tsc --noEmit",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "precommit": "npm run lint && npm run type-check && npm run test"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "ai",
+    "gemini",
+    "openai",
+    "openrouter",
+    "code-analysis",
+    "developer-tools"
+  ],
+  "author": "Zenode Team",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@google/generative-ai": "^0.21.0",
+    "openai": "^4.72.0",
+    "redis": "^4.7.0",
+    "zod": "^3.23.8",
+    "dotenv": "^16.4.5",
+    "winston": "^3.15.0",
+    "winston-daily-rotate-file": "^5.0.0",
+    "axios": "^1.7.7",
+    "tiktoken": "^1.0.17"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "typescript": "^5.5.3",
+    "@typescript-eslint/eslint-plugin": "^6.21.0",
+    "@typescript-eslint/parser": "^6.21.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "prettier": "^3.3.3",
+    "jest": "^29.7.0",
+    "@types/jest": "^29.5.12",
+    "ts-jest": "^29.2.5",
+    "@jest/globals": "^29.7.0",
+    "nodemon": "^3.1.4",
+    "tsx": "^4.16.2",
+    "rimraf": "^5.0.8",
+    "jest-mock-extended": "^3.0.7"
+  }
+}
