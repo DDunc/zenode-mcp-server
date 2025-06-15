@@ -46,7 +46,8 @@
       "Bash(./get-logs.sh:*)",
       "Bash(npm install:*)",
       "Bash(ollama:*)",
-      "Bash(./scripts/setup-local-ai.sh:*)"
+      "Bash(./scripts/setup-local-ai.sh:*)",
+      "Bash(git remote set-url:*)"
     ],
     "deny": []
   }
