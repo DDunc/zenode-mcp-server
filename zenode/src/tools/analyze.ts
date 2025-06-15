@@ -31,6 +31,7 @@ import {
   getThinkingModeDescription,
 } from '../utils/tool-helpers.js';
 import { logger } from '../utils/logger.js';
+import { modelProviderRegistry } from '../providers/registry.js';
 
 /**
  * Request validation schema
@@ -165,44 +166,42 @@ export class AnalyzeTool extends BaseTool {
         conversationContext,
       );
       
-      // Make API call (this would be handled by the provider)
+      // Get provider and make actual API call
+      const provider = await modelProviderRegistry.getProviderForModel(model);
+      if (!provider) {
+        throw new Error(`No provider available for model: ${model}`);
+      }
+      
       logger.info('Executing analysis', { 
         model,
         analysisType: validatedRequest.analysis_type || 'general',
       });
       
-      // For now, return a mock response showing the structure
-      const mockResponse = `
-## Executive Overview
-The codebase demonstrates solid modular architecture with clear separation of concerns. However, the data layer shows signs of coupling that could impact scalability as the system grows.
-
-## Strategic Findings (Ordered by Impact)
-
-### 1. Data Layer Coupling
-**Insight:** Direct database access from multiple services creates tight coupling.
-**Evidence:** Services in src/services/*.js directly import database models.
-**Impact:** Limits ability to scale services independently or change data storage.
-**Recommendation:** Introduce repository pattern to abstract data access.
-**Effort vs. Benefit:** Medium effort; High payoff.
-
-### 2. Missing Observability Layer
-**Insight:** Limited logging and no structured metrics collection.
-**Evidence:** Only console.log statements found, no APM integration.
-**Impact:** Difficult to diagnose production issues or track performance.
-**Recommendation:** Implement structured logging with correlation IDs.
-**Effort vs. Benefit:** Low effort; High payoff.
-
-## Quick Wins
-• Add request correlation IDs to all API endpoints
-• Implement basic health check endpoint
-• Add environment-specific config validation on startup`;
+      // Generate response from AI
+      const response = await provider.generateResponse(modelRequest);
       
-      const formattedResponse = this.formatResponse(mockResponse, validatedRequest);
+      const formattedResponse = this.formatResponse(response.content, validatedRequest);
+      
+      // Handle conversation threading
+      const continuationOffer = await this.handleConversationThreading(
+        this.name,
+        validatedRequest.prompt,
+        response.content,
+        response.modelName,
+        response.usage.inputTokens,
+        response.usage.outputTokens,
+        validatedRequest.continuation_id,
+      );
       
       return this.formatOutput(
         formattedResponse,
         'success',
         'text',
+        {
+          model_used: response.modelName,
+          token_usage: response.usage,
+        },
+        continuationOffer,
       );
       
     } catch (error) {

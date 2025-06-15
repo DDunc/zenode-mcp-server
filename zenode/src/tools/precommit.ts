@@ -35,6 +35,7 @@ import {
 } from '../utils/git-utils.js';
 import { logger } from '../utils/logger.js';
 import { countTokens } from '../utils/token-utils.js';
+import { modelProviderRegistry } from '../providers/registry.js';
 
 /**
  * Request validation schema
@@ -252,42 +253,40 @@ export class PrecommitTool extends BaseTool {
         conversationContext,
       );
       
-      // Make API call (this would be handled by the provider)
+      // Get provider and make actual API call
+      const provider = await modelProviderRegistry.getProviderForModel(model);
+      if (!provider) {
+        throw new Error(`No provider available for model: ${model}`);
+      }
+      
       logger.info('Executing precommit validation', { 
         model,
         repositories: reposWithChanges.length,
       });
       
-      // For now, return a mock response showing the structure
-      const mockResponse = `
-### Repository Summary
-**Repository:** ${reposWithChanges[0]?.repoPath || 'Unknown'}
-- Files changed: 3
-- Overall assessment: 1 critical issue, 2 high priority fixes needed
-
-### Issues by Severity
-[CRITICAL] SQL Injection Vulnerability
-- File: src/api/users.js:45
-- Description: User input directly concatenated into SQL query
-- Fix: Use parameterized queries: db.query('SELECT * FROM users WHERE id = ?', [userId])
-
-[HIGH] Missing Error Handling
-- File: src/services/payment.js:78
-- Description: Async operation without try-catch could crash server
-- Fix: Wrap in try-catch block and return appropriate error response
-
-### Recommendations
-- Top priority fixes before commit:
-  1. Fix SQL injection vulnerability immediately
-  2. Add error handling to payment service
-- Notable positives to keep:
-  - Good use of async/await patterns
-  - Clear function naming conventions`;
+      // Generate response from AI
+      const response = await provider.generateResponse(modelRequest);
+      
+      // Handle conversation threading
+      const continuationOffer = await this.handleConversationThreading(
+        this.name,
+        validatedRequest.prompt || 'Pre-commit validation',
+        response.content,
+        response.modelName,
+        response.usage.inputTokens,
+        response.usage.outputTokens,
+        validatedRequest.continuation_id,
+      );
       
       return this.formatOutput(
-        mockResponse,
+        response.content,
         'success',
         'text',
+        {
+          model_used: response.modelName,
+          token_usage: response.usage,
+        },
+        continuationOffer,
       );
       
     } catch (error) {

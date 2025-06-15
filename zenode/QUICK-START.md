@@ -11,7 +11,7 @@
 ```bash
 # Clone the repo (if not already done)
 git clone https://github.com/yourusername/zen-mcp-server.git
-cd zen-mcp-server/node-js
+cd zen-mcp-server/zenode
 
 # Install dependencies
 npm install

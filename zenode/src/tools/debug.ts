@@ -26,6 +26,7 @@ import {
   getThinkingModeDescription,
 } from '../utils/tool-helpers.js';
 import { logger } from '../utils/logger.js';
+import { modelProviderRegistry } from '../providers/registry.js';
 
 /**
  * Request validation schema
@@ -178,40 +179,37 @@ export class DebugTool extends BaseTool {
         conversationContext,
       );
       
-      // Make API call (this would be handled by the provider)
+      // Get provider and make actual API call
+      const provider = await modelProviderRegistry.getProviderForModel(model);
+      if (!provider) {
+        throw new Error(`No provider available for model: ${model}`);
+      }
+      
       logger.info('Executing debug analysis', { model });
       
-      // For now, return a mock response showing the structure
-      const mockResponse = `
-## Summary
-The application crashes when processing large CSV files due to memory exhaustion.
-
-## Hypotheses (Ranked by Likelihood)
-
-### 1. Unbounded Memory Allocation (Confidence: High)
-**Root Cause:** The CSV parser loads entire file into memory without streaming.
-**Evidence:** OOM error occurs at line 145 in csv-parser.js
-**Correlation:** Crash only happens with files > 100MB
-**Validation:** Monitor memory usage while parsing a large file
-**Minimal Fix:** Replace readFileSync with createReadStream and process in chunks
-**Regression Check:** Streaming approach maintains same output format
-
-### 2. Memory Leak in Data Processing (Confidence: Low)
-**Root Cause:** Objects not being garbage collected properly
-**Evidence:** Memory grows even with small files over time
-**Correlation:** Issue appears after multiple file operations
-**Validation:** Run heap profiler during extended usage
-**Minimal Fix:** Clear object references after processing
-**Regression Check:** No impact on processing logic
-
-## Immediate Actions
-1. Add memory usage logging before/after file processing
-2. Set --max-old-space-size flag as temporary mitigation`;
+      // Generate response from AI
+      const response = await provider.generateResponse(modelRequest);
+      
+      // Handle conversation threading
+      const continuationOffer = await this.handleConversationThreading(
+        this.name,
+        validatedRequest.prompt,
+        response.content,
+        response.modelName,
+        response.usage.inputTokens,
+        response.usage.outputTokens,
+        validatedRequest.continuation_id,
+      );
       
       return this.formatOutput(
-        mockResponse,
+        response.content,
         'success',
         'text',
+        {
+          model_used: response.modelName,
+          token_usage: response.usage,
+        },
+        continuationOffer,
       );
       
     } catch (error) {

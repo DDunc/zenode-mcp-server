@@ -23,6 +23,7 @@ import {
   GOOGLE_ALLOWED_MODELS,
 } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { getRestrictionService } from '../utils/model-restrictions.js';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -67,6 +68,9 @@ export class ModelProviderRegistry {
     // Register provider factories based on configuration
     await this.registerConfiguredProviders();
 
+    // Check and log model restrictions
+    await this.validateModelRestrictions();
+
     // Validate auto mode if enabled
     if (IS_AUTO_MODE) {
       this.validateAutoMode();
@@ -81,8 +85,8 @@ export class ModelProviderRegistry {
    */
   private async loadCustomModelsConfig(): Promise<void> {
     try {
-      // Try to load from the parent conf directory
-      const configPath = path.resolve(__dirname, '../../../conf/custom_models.json');
+      // Try to load from the app conf directory
+      const configPath = path.resolve(__dirname, '../../conf/custom_models.json');
       const configData = await fs.readFile(configPath, 'utf-8');
       this.customModelsConfig = JSON.parse(configData) as CustomModelsConfig;
       logger.info('Loaded custom models configuration');
@@ -253,29 +257,57 @@ export class ModelProviderRegistry {
   }
 
   /**
+   * Validate model restrictions against known models
+   */
+  private async validateModelRestrictions(): Promise<void> {
+    const restrictionService = getRestrictionService();
+    const restrictions = restrictionService.getRestrictionSummary();
+
+    if (Object.keys(restrictions).length > 0) {
+      logger.info('Model restrictions configured:');
+      for (const [providerName, allowedModels] of Object.entries(restrictions)) {
+        if (allowedModels.length > 0) {
+          logger.info(`  ${providerName}: ${allowedModels.join(', ')}`);
+        }
+      }
+
+      // Validate restrictions against known models
+      const providerInstances = new Map<ProviderType, any>();
+      for (const providerType of [ProviderType.GOOGLE, ProviderType.OPENAI]) {
+        const provider = await this.getProvider(providerType);
+        if (provider) {
+          providerInstances.set(providerType, provider);
+        }
+      }
+
+      if (providerInstances.size > 0) {
+        restrictionService.validateAgainstKnownModels(providerInstances);
+      }
+    } else {
+      logger.info('No model restrictions configured - all models allowed');
+    }
+  }
+
+  /**
    * Check if a model is allowed by restrictions
    */
   private isModelAllowed(modelName: string): boolean {
-    // Check Google model restrictions
-    if (GOOGLE_ALLOWED_MODELS && GOOGLE_ALLOWED_MODELS.length > 0) {
-      if (modelName.includes('gemini') || modelName.includes('flash') || modelName.includes('pro')) {
-        return GOOGLE_ALLOWED_MODELS.some((allowed) => 
-          modelName.toLowerCase().includes(allowed.toLowerCase()),
-        );
-      }
+    const restrictionService = getRestrictionService();
+    
+    // Try to determine provider type from model name
+    let providerType: ProviderType;
+    
+    if (modelName.includes('gemini') || modelName === 'flash' || modelName === 'pro') {
+      providerType = ProviderType.GOOGLE;
+    } else if (modelName.includes('o3') || modelName.includes('o4')) {
+      providerType = ProviderType.OPENAI;
+    } else if (modelName.includes('openrouter') || modelName.includes('/')) {
+      providerType = ProviderType.OPENROUTER;
+    } else {
+      providerType = ProviderType.CUSTOM;
     }
 
-    // Check OpenAI model restrictions
-    if (OPENAI_ALLOWED_MODELS && OPENAI_ALLOWED_MODELS.length > 0) {
-      if (modelName.includes('o3') || modelName.includes('o4')) {
-        return OPENAI_ALLOWED_MODELS.some((allowed) => 
-          modelName.toLowerCase().includes(allowed.toLowerCase()),
-        );
-      }
-    }
-
-    // No restrictions or not a restricted model type
-    return true;
+    return restrictionService.isAllowed(providerType, modelName);
   }
 
   /**

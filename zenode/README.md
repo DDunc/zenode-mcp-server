@@ -32,8 +32,8 @@ At least one of the following API configurations is required:
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/zenode-mcp-server.git
-cd zenode-mcp-server
+git clone https://github.com/yourusername/zen-mcp-server.git
+cd zen-mcp-server/zenode
 ```
 
 2. Copy the environment template:
@@ -63,8 +63,8 @@ docker-compose up -d
 
 1. Clone and install dependencies:
 ```bash
-git clone https://github.com/yourusername/zenode-mcp-server.git
-cd zenode-mcp-server
+git clone https://github.com/yourusername/zen-mcp-server.git
+cd zen-mcp-server/zenode
 npm install
 ```
 
@@ -141,7 +141,7 @@ When multiple providers are configured, the system selects models in this order:
   "mcpServers": {
     "zenode": {
       "command": "node",
-      "args": ["/path/to/zenode-mcp-server/node-js/dist/index.js"],
+      "args": ["/path/to/zen-mcp-server/zenode/dist/index.js"],
       "env": {
         "GEMINI_API_KEY": "your_key_here",
         "MCP_WORKSPACE": "/path/to/your/workspace"

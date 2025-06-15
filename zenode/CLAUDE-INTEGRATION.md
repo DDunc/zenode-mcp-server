@@ -42,7 +42,7 @@ Edit the configuration file to add Zenode:
   "mcpServers": {
     "zenode": {
       "command": "node",
-      "args": ["/path/to/zenode-mcp-server/node-js/dist/index.js"],
+      "args": ["/path/to/zen-mcp-server/zenode/dist/index.js"],
       "env": {
         "GEMINI_API_KEY": "your-gemini-key",
         "OPENAI_API_KEY": "your-openai-key",
@@ -114,7 +114,7 @@ You can have both servers configured simultaneously without conflicts:
     },
     "zenode": {
       "command": "node",
-      "args": ["/path/to/zenode-mcp-server/node-js/dist/index.js"],
+      "args": ["/path/to/zen-mcp-server/zenode/dist/index.js"],
       "env": {
         "GEMINI_API_KEY": "your-key",
         "MCP_WORKSPACE": "/path/to/workspace"

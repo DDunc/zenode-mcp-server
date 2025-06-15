@@ -27,6 +27,7 @@ import {
   getThinkingModeDescription,
 } from '../utils/tool-helpers.js';
 import { logger } from '../utils/logger.js';
+import { modelProviderRegistry } from '../providers/registry.js';
 
 /**
  * Request validation schema
@@ -163,17 +164,40 @@ export class ThinkDeepTool extends BaseTool {
         conversationContext,
       );
       
-      // Make API call (this would be handled by the provider)
+      // Get provider and make actual API call
+      const provider = await modelProviderRegistry.getProviderForModel(model);
+      if (!provider) {
+        throw new Error(`No provider available for model: ${model}`);
+      }
+      
       logger.info('Executing ThinkDeep analysis', { model });
       
-      // For now, return a mock response showing the structure
-      const mockResponse = 'Deep analysis response would go here...';
-      const formattedResponse = this.formatResponse(mockResponse, validatedRequest);
+      // Generate response from AI
+      const response = await provider.generateResponse(modelRequest);
+      
+      // Format the response with the critical evaluation template
+      const formattedResponse = this.formatResponse(response.content, validatedRequest, response.modelName);
+      
+      // Handle conversation threading
+      const continuationOffer = await this.handleConversationThreading(
+        this.name,
+        validatedRequest.prompt,
+        formattedResponse,
+        response.modelName,
+        response.usage.inputTokens,
+        response.usage.outputTokens,
+        validatedRequest.continuation_id,
+      );
       
       return this.formatOutput(
         formattedResponse,
         'success',
         'text',
+        {
+          model_used: response.modelName,
+          token_usage: response.usage,
+        },
+        continuationOffer,
       );
       
     } catch (error) {
@@ -259,9 +283,9 @@ Please provide deep analysis that extends Claude's thinking with:
     return fullPrompt;
   }
   
-  private formatResponse(response: string, request: ThinkDeepRequest): string {
-    // In the real implementation, this would get model info from the API response
-    const modelName = 'your fellow developer';
+  private formatResponse(response: string, request: ThinkDeepRequest, modelName: string): string {
+    // Format the model name for display
+    const displayModelName = modelName || 'your fellow developer';
     
     return `${response}
 
@@ -269,7 +293,7 @@ Please provide deep analysis that extends Claude's thinking with:
 
 ## Critical Evaluation Required
 
-Claude, please critically evaluate ${modelName}'s analysis by thinking hard about the following:
+Claude, please critically evaluate ${displayModelName}'s analysis by thinking hard about the following:
 
 1. **Technical merit** - Which suggestions are valuable vs. have limitations?
 2. **Constraints** - Fit with codebase patterns, performance, security, architecture
@@ -278,6 +302,6 @@ Claude, please critically evaluate ${modelName}'s analysis by thinking hard abou
 considerations and arrive at the best technical solution. Feel free to use zen's chat tool for a follow-up discussion
 if needed.
 
-Remember: Use ${modelName}'s insights to enhance, not replace, your analysis.`;
+Remember: Use ${displayModelName}'s insights to enhance, not replace, your analysis.`;
   }
 }

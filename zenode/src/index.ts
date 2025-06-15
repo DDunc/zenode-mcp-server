@@ -80,8 +80,56 @@ const TOOLS: Record<string, BaseTool> = {
  * @throws {Error} If no valid API keys are found or conflicting configurations detected
  */
 async function configureProviders(): Promise<void> {
-  const validProviders = getConfiguredProviders();
+  // Detailed provider validation matching Python implementation
+  const validProviders: string[] = [];
+  let hasNativeApis = false;
+  let hasOpenRouter = false;
+  let hasCustom = false;
 
+  // Check for Gemini API key
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (geminiKey && geminiKey !== 'your_gemini_api_key_here') {
+    validProviders.push('Gemini');
+    hasNativeApis = true;
+    logger.info('Gemini API key found - Gemini models available');
+  }
+
+  // Check for OpenAI API key
+  const openaiKey = process.env.OPENAI_API_KEY;
+  if (openaiKey && openaiKey !== 'your_openai_api_key_here') {
+    validProviders.push('OpenAI (o3)');
+    hasNativeApis = true;
+    logger.info('OpenAI API key found - o3 model available');
+  }
+
+  // Check for OpenRouter API key
+  const openrouterKey = process.env.OPENROUTER_API_KEY;
+  if (openrouterKey && openrouterKey !== 'your_openrouter_api_key_here') {
+    validProviders.push('OpenRouter');
+    hasOpenRouter = true;
+    logger.info('OpenRouter API key found - Multiple models available via OpenRouter');
+  }
+
+  // Check for custom API endpoint (Ollama, vLLM, etc.)
+  const customUrl = process.env.CUSTOM_API_URL;
+  if (customUrl) {
+    // IMPORTANT: Always read CUSTOM_API_KEY even if empty
+    // - Some providers (vLLM, LM Studio, enterprise APIs) require authentication
+    // - Others (Ollama) work without authentication (empty key)
+    // - DO NOT remove this variable - it's needed for provider factory function
+    const customKey = process.env.CUSTOM_API_KEY || ''; // Default to empty (Ollama doesn't need auth)
+    const customModel = process.env.CUSTOM_MODEL_NAME || 'llama3.2';
+    validProviders.push(`Custom API (${customUrl})`);
+    hasCustom = true;
+    logger.info(`Custom API endpoint found: ${customUrl} with model ${customModel}`);
+    if (customKey) {
+      logger.debug('Custom API key provided for authentication');
+    } else {
+      logger.debug('No custom API key provided (using unauthenticated access)');
+    }
+  }
+
+  // Require at least one valid provider
   if (validProviders.length === 0) {
     throw new Error(
       'At least one API configuration is required. Please set either:\n' +
@@ -94,12 +142,32 @@ async function configureProviders(): Promise<void> {
 
   logger.info(`Available providers: ${validProviders.join(', ')}`);
 
+  // Log provider priority
+  const priority: string[] = [];
+  if (hasNativeApis) priority.push('Native APIs (Gemini, OpenAI)');
+  if (hasCustom) priority.push('Custom endpoints');
+  if (hasOpenRouter) priority.push('OpenRouter (catch-all)');
+
+  if (priority.length > 1) {
+    logger.info(`Provider priority: ${priority.join(' → ')}`);
+  }
+
   // Initialize the provider registry
   await modelProviderRegistry.initialize();
 
-  // Log available models in auto mode
+  // Check if auto mode has any models available after restrictions
   if (IS_AUTO_MODE) {
     const availableModels = await modelProviderRegistry.getAvailableModels(true);
+    if (availableModels.length === 0) {
+      logger.error(
+        'Auto mode is enabled but no models are available after applying restrictions. ' +
+          'Please check your OPENAI_ALLOWED_MODELS and GOOGLE_ALLOWED_MODELS settings.',
+      );
+      throw new Error(
+        'No models available for auto mode due to restrictions. ' +
+          'Please adjust your allowed model settings or disable auto mode.',
+      );
+    }
     logger.info(`Auto mode enabled with ${availableModels.length} available models`);
   }
 }

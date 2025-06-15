@@ -51,14 +51,19 @@ export interface ConversationTurn {
   content: string;
   model?: string;
   timestamp: string;
+  tool?: string;
+  files?: string[];
   metadata?: Record<string, any>;
 }
 
 export interface ConversationThread {
+  id: string;
   thread_id: string;
+  tool_name: string;
   created_at: string;
   last_updated: string;
   turns: ConversationTurn[];
+  initial_context?: Record<string, any>;
   metadata: {
     tools_used: string[];
     total_input_tokens: number;

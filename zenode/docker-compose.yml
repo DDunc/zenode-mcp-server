@@ -58,7 +58,7 @@ services:
     image: busybox:latest
     container_name: zenode-log-monitor
     restart: unless-stopped
-    command: tail -f /logs/zenode_mcp_server*.log /logs/zenode_mcp_activity*.log
+    command: sh -c 'while true; do if ls /logs/*.log >/dev/null 2>&1; then tail -f /logs/*.log; else echo "Waiting for log files..."; sleep 5; fi; done'
     volumes:
       - zenode-logs:/logs:ro
     depends_on:

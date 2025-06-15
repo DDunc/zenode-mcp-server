@@ -216,13 +216,13 @@ export abstract class BaseTool {
       if (continuationId) {
         // Continue existing thread
         threadId = continuationId;
-        await addTurn(threadId, 'user', userPrompt, undefined, inputTokens, 0);
-        await addTurn(threadId, 'assistant', assistantResponse, modelUsed, 0, outputTokens);
+        await addTurn(threadId, 'user', userPrompt, { inputTokens, tool: toolName });
+        await addTurn(threadId, 'assistant', assistantResponse, { modelName: modelUsed, outputTokens, tool: toolName });
       } else {
         // Create new thread
         threadId = await createThread(toolName, modelUsed);
-        await addTurn(threadId, 'user', userPrompt, undefined, inputTokens, 0);
-        await addTurn(threadId, 'assistant', assistantResponse, modelUsed, 0, outputTokens);
+        await addTurn(threadId, 'user', userPrompt, { inputTokens, tool: toolName });
+        await addTurn(threadId, 'assistant', assistantResponse, { modelName: modelUsed, outputTokens, tool: toolName });
       }
 
       // Get conversation stats

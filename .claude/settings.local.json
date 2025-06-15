@@ -25,7 +25,18 @@
       "Bash(redis-cli:*)",
       "Bash(mv:*)",
       "Bash(claude mcp:*)",
-      "mcp__zenode__version"
+      "mcp__zenode__version",
+      "mcp__zenode__codereview",
+      "Bash(npm start:*)",
+      "mcp__zenode__chat",
+      "mcp__zenode__thinkdeep",
+      "Bash(echo $MCP_WORKSPACE)",
+      "mcp__zenode__debug",
+      "mcp__zenode__precommit",
+      "mcp__zenode__testgen",
+      "Bash(npm test)",
+      "mcp__zenode__analyze",
+      "Bash(npm run type-check:*)"
     ],
     "deny": []
   }

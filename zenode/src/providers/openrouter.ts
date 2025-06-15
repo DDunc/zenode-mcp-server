@@ -41,7 +41,8 @@ export class OpenRouterProvider extends BaseModelProvider {
       baseURL: 'https://openrouter.ai/api/v1',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
-        'HTTP-Referer': 'https://github.com/yourusername/zenode-mcp-server',
+        //FIXME: define from the user!
+        'HTTP-Referer': 'https://github.com/DDunc/zenode-mcp-server',
         'X-Title': 'Zenode MCP Server',
         'Content-Type': 'application/json',
       },
@@ -96,7 +97,7 @@ export class OpenRouterProvider extends BaseModelProvider {
    */
   private async loadCustomModelsConfig(): Promise<void> {
     try {
-      const configPath = path.resolve(__dirname, '../../../conf/custom_models.json');
+      const configPath = path.resolve(__dirname, '../../conf/custom_models.json');
       const configData = await fs.readFile(configPath, 'utf-8');
       this.customModelsConfig = JSON.parse(configData) as CustomModelsConfig;
       logger.debug('OpenRouter loaded custom models configuration');

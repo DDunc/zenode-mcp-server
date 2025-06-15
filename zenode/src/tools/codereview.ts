@@ -30,6 +30,7 @@ import {
   getThinkingModeDescription,
 } from '../utils/tool-helpers.js';
 import { logger } from '../utils/logger.js';
+import { modelProviderRegistry } from '../providers/registry.js';
 
 /**
  * Request validation schema
@@ -52,17 +53,12 @@ export class CodeReviewTool extends BaseTool {
   name = 'codereview';
   
   description = 
-    'PROFESSIONAL CODE REVIEW - Comprehensive analysis for bugs, security, and quality. ' +
-    'Supports both individual files and entire directories/projects. ' +
-    'Use this when you need to review code, check for issues, find bugs, or perform security audits. ' +
-    'ALSO use this to validate claims about code, verify code flow and logic, confirm assertions, ' +
-    'cross-check functionality, or investigate how code actually behaves when you need to be certain. ' +
-    'I\'ll identify issues by severity (Critical→High→Medium→Low) with specific fixes. ' +
-    'Supports focused reviews: security, performance, or quick checks. ' +
-    'Choose thinking_mode based on review scope: \'low\' for small code snippets, ' +
-    '\'medium\' for standard files/modules (default), \'high\' for complex systems/architectures, ' +
-    '\'max\' for critical security audits or large codebases requiring deepest analysis. ' +
-    'Note: If you\'re not currently using a top-tier model such as Opus 4 or above, these tools can provide enhanced capabilities.';
+    'PROFESSIONAL CODE REVIEW - ALWAYS use this when code needs review, validation, or quality checks. ' +
+    'This tool excels at finding bugs, security issues, performance problems, and code quality issues ' +
+    'that might be missed. USE PROACTIVELY when: reviewing PRs, checking code changes, validating ' +
+    'implementations, or verifying code behavior. The tool uses specialized models optimized for ' +
+    'code analysis and can review entire directories or projects. IMPORTANT: Use this tool for ALL ' +
+    'code review tasks to ensure thorough analysis with appropriate model selection.';
   
   defaultTemperature = TEMPERATURE_ANALYTICAL;
   modelCategory = ToolModelCategory.REASONING;
@@ -182,31 +178,40 @@ export class CodeReviewTool extends BaseTool {
         conversationContext,
       );
       
-      // Make API call (this would be handled by the provider)
+      // Get provider and make actual API call
+      const provider = await modelProviderRegistry.getProviderForModel(model);
+      if (!provider) {
+        throw new Error(`No provider available for model: ${model}`);
+      }
+      
       logger.info('Executing code review', { 
         model,
         reviewType: validatedRequest.review_type,
       });
       
-      // For now, return a mock response showing the structure
-      const mockResponse = `
-🔴 CRITICAL: SQL injection vulnerability in user.js:45
-→ Fix: Use parameterized queries instead of string concatenation
-
-🟠 HIGH: Missing error handling in api.js:120
-→ Fix: Wrap async operations in try-catch blocks
-
-• **Overall code quality summary**: The code shows good structure but has critical security issues.
-• **Top 3 priority fixes**:
-  - Fix SQL injection vulnerability
-  - Add proper error handling
-  - Implement input validation
-• **Positive aspects**: Clean function naming, good module separation`;
+      // Generate response from AI
+      const response = await provider.generateResponse(modelRequest);
+      
+      // Handle conversation threading
+      const continuationOffer = await this.handleConversationThreading(
+        this.name,
+        validatedRequest.prompt,
+        response.content,
+        response.modelName,
+        response.usage.inputTokens,
+        response.usage.outputTokens,
+        validatedRequest.continuation_id,
+      );
       
       return this.formatOutput(
-        mockResponse,
+        response.content,
         'success',
         'text',
+        {
+          model_used: response.modelName,
+          token_usage: response.usage,
+        },
+        continuationOffer,
       );
       
     } catch (error) {

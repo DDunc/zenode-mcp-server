@@ -127,6 +127,20 @@ export const CUSTOM_MODEL_NAME = process.env.CUSTOM_MODEL_NAME || 'llama3.2';
 // Model restrictions (if any)
 export const OPENAI_ALLOWED_MODELS = process.env.OPENAI_ALLOWED_MODELS?.split(',').map((m) => m.trim());
 export const GOOGLE_ALLOWED_MODELS = process.env.GOOGLE_ALLOWED_MODELS?.split(',').map((m) => m.trim());
+export const OPENROUTER_ALLOWED_MODELS = process.env.OPENROUTER_ALLOWED_MODELS?.split(',').map((m) => m.trim());
+
+// Advanced configuration options for maximum Python parity
+export const MAX_CONVERSATION_TURNS = parseInt(process.env.MAX_CONVERSATION_TURNS || '20', 10);
+export const CONVERSATION_TIMEOUT_HOURS = parseInt(process.env.CONVERSATION_TIMEOUT_HOURS || '3', 10);
+
+// Validate configuration values
+if (MAX_CONVERSATION_TURNS <= 0) {
+  console.warn(`Invalid MAX_CONVERSATION_TURNS value (${MAX_CONVERSATION_TURNS}), using default of 20 turns`);
+}
+
+if (CONVERSATION_TIMEOUT_HOURS <= 0) {
+  console.warn(`Invalid CONVERSATION_TIMEOUT_HOURS value (${CONVERSATION_TIMEOUT_HOURS}), using default of 3 hours`);
+}
 
 // Helper function to check if any API is configured
 export function hasAnyApiConfigured(): boolean {

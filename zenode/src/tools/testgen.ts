@@ -31,6 +31,7 @@ import { logger } from '../utils/logger.js';
 import { countTokens } from '../utils/token-utils.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { modelProviderRegistry } from '../providers/registry.js';
 
 /**
  * Request validation schema
@@ -173,61 +174,44 @@ export class TestGenTool extends BaseTool {
         conversationContext,
       );
       
-      // Make API call (this would be handled by the provider)
+      // Get provider and make actual API call
+      const provider = await modelProviderRegistry.getProviderForModel(model);
+      if (!provider) {
+        throw new Error(`No provider available for model: ${model}`);
+      }
+      
       logger.info('Executing test generation', { model });
       
-      // For now, return a mock response showing the structure
-      const mockResponse = `
-// tests/user.test.ts
-import { describe, it, expect, beforeEach } from '@jest/globals';
-import { User } from '../src/user';
-
-describe('User.login()', () => {
-  let user: User;
-  
-  beforeEach(() => {
-    user = new User();
-  });
-  
-  // Happy path
-  it('should return token for valid credentials', async () => {
-    const token = await user.login('valid@email.com', 'correctPassword');
-    expect(token).toBeDefined();
-    expect(typeof token).toBe('string');
-  });
-  
-  // Edge case: null/undefined inputs
-  it('should throw error for null email', async () => {
-    await expect(user.login(null, 'password')).rejects.toThrow('Email is required');
-  });
-  
-  // Security: SQL injection attempt
-  it('should sanitize email input to prevent injection', async () => {
-    const maliciousEmail = "admin'--";
-    await expect(user.login(maliciousEmail, 'password')).rejects.toThrow('Invalid credentials');
-  });
-  
-  // Concurrency: race condition
-  it('should handle concurrent login attempts', async () => {
-    const promises = Array(10).fill(null).map(() => 
-      user.login('test@email.com', 'password')
-    );
-    const results = await Promise.allSettled(promises);
-    // Verify no race conditions in token generation
-  });
-});`;
+      // Generate response from AI
+      const response = await provider.generateResponse(modelRequest);
       
       // Check if response contains special status
-      const specialStatus = parseSpecialStatus(mockResponse);
+      const specialStatus = parseSpecialStatus(response.content);
       if (specialStatus) {
         // Handle special statuses appropriately
         logger.info('TestGen returned special status:', specialStatus);
       }
       
+      // Handle conversation threading
+      const continuationOffer = await this.handleConversationThreading(
+        this.name,
+        validatedRequest.prompt,
+        response.content,
+        response.modelName,
+        response.usage.inputTokens,
+        response.usage.outputTokens,
+        validatedRequest.continuation_id,
+      );
+      
       return this.formatOutput(
-        mockResponse,
+        response.content,
         'success',
         'code',
+        {
+          model_used: response.modelName,
+          token_usage: response.usage,
+        },
+        continuationOffer,
       );
       
     } catch (error) {
