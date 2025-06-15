@@ -2,7 +2,7 @@
 
 **Node.js/TypeScript implementation of the powerful Zen MCP Server**
 
-This is the Node.js port of the original (very actively developed, awesome) Python [Zen MCP Server](https://github.com/BeehiveInnovations/zen-mcp-serve). The zenode implementation provides the same powerful AI orchestration capabilities with the performance and ecosystem benefits of Node.js.
+This is the Node.js port of the original (very actively developed, awesome) Python [Zen MCP Server](https://github.com/BeehiveInnovations/zen-mcp-server). The zenode implementation provides the same powerful AI orchestration capabilities with the performance and ecosystem benefits of Node.js.
 
 ## Quick Start
 
