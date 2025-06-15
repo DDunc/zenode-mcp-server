@@ -36,6 +36,21 @@ const config: ZenodeConfig = {
     // Optional: HTTP server port (for future API)
     // port: 3000,
     // host: 'localhost'
+  },
+  
+  models: {
+    // Base directory for storing local models
+    modelsPath: '.zenode/models',
+    
+    // Gopher tool model configuration
+    gopher: {
+      // Local model download path for gopher tool  
+      modelPath: '.zenode/models/gopher',
+      // Ollama model name (currently used: qwen2.5:0.5b)
+      modelName: 'qwen2.5:0.5b',
+      // Ollama model reference URL
+      modelSrcUrl: 'https://ollama.com/library/qwen2.5:0.5b'
+    }
   }
 };
 

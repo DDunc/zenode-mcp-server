@@ -31,6 +31,20 @@ export interface ServerConfig {
   maxConcurrentRequests: number;
 }
 
+export interface ModelsConfig {
+  /** Path where local models are stored */
+  modelsPath: string;
+  /** Configuration for the gopher tool's local model */
+  gopher?: {
+    /** Path to the local model for gopher tool */
+    modelPath?: string;
+    /** Actual model name/filename */
+    modelName?: string;
+    /** URL to download the model from */
+    modelSrcUrl?: string;
+  };
+}
+
 export interface ZenodeConfig {
   /** Logging configuration */
   logging: LoggingConfig;
@@ -38,6 +52,8 @@ export interface ZenodeConfig {
   shortcuts: ShortcutsConfig;
   /** Server configuration */
   server: ServerConfig;
+  /** Local models configuration */
+  models: ModelsConfig;
   /** Config file version for migration support */
   version: string;
 }
@@ -56,6 +72,14 @@ export const DEFAULT_CONFIG: ZenodeConfig = {
   server: {
     requestTimeout: 30000,
     maxConcurrentRequests: 10
+  },
+  models: {
+    modelsPath: '.zenode/models',
+    gopher: {
+      modelPath: '.zenode/models/gopher',
+      modelName: 'qwen2.5:0.5b',
+      modelSrcUrl: 'https://ollama.com/library/qwen2.5:0.5b'
+    }
   },
   version: '1.0.0'
 };

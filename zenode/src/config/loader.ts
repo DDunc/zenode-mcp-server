@@ -3,7 +3,7 @@
  */
 
 import { promises as fs } from 'fs';
-import { join } from 'path';
+import { join, resolve, isAbsolute } from 'path';
 import { pathToFileURL } from 'url';
 import { ZenodeConfig, DEFAULT_CONFIG } from './types.js';
 import { logger } from '../utils/logger.js';
@@ -12,6 +12,7 @@ export class ConfigLoader {
   private static instance: ConfigLoader;
   private config: ZenodeConfig = DEFAULT_CONFIG;
   private configPath: string | null = null;
+  private basePath: string = process.cwd();
 
   private constructor() {}
 
@@ -27,6 +28,7 @@ export class ConfigLoader {
    * Priority: zenode.config.ts > zenode.config.js > zenode-config.json > defaults
    */
   async loadConfig(basePath: string = process.cwd()): Promise<ZenodeConfig> {
+    this.basePath = basePath;
     const configFiles = [
       'zenode.config.ts',
       'zenode.config.js', 
@@ -103,10 +105,23 @@ export class ConfigLoader {
   }
 
   /**
+   * Resolve a path relative to the project root
+   */
+  private resolvePath(path: string): string {
+    if (isAbsolute(path)) {
+      return path;
+    }
+    return resolve(this.basePath, path);
+  }
+
+  /**
    * Get specific config section
    */
   getLoggingConfig() {
-    return { ...this.config.logging };
+    const loggingConfig = { ...this.config.logging };
+    // Resolve the log path relative to project root
+    loggingConfig.logPath = this.resolvePath(loggingConfig.logPath);
+    return loggingConfig;
   }
 
   getShortcutsConfig() {

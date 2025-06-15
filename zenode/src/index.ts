@@ -45,6 +45,7 @@ import { DebugTool } from './tools/debug.js';
 import { AnalyzeTool } from './tools/analyze.js';
 import { PrecommitTool } from './tools/precommit.js';
 import { TestGenTool } from './tools/testgen.js';
+import { GopherTool } from './tools/gopher.js';
 
 // Create the MCP server instance with a unique name identifier
 // This name is used by MCP clients to identify and connect to this specific server
@@ -60,7 +61,7 @@ const server = new Server(
   },
 );
 
-// Initialize the tool registry with all available AI-powered tools
+// Initialize the tool registry with all available tools
 // Each tool provides specialized functionality for different development tasks
 // Tools are instantiated once and reused across requests (stateless design)
 const TOOLS: Record<string, BaseTool> = {
@@ -71,16 +72,15 @@ const TOOLS: Record<string, BaseTool> = {
   analyze: new AnalyzeTool(),
   precommit: new PrecommitTool(),
   testgen: new TestGenTool(),
+  gopher: new GopherTool(), // Local file system access bridge
 };
 
 // Initialize middleware pipeline
 const middlewarePipeline = new DefaultMiddlewarePipeline();
 
 // Register conversation logger middleware
-const conversationLogger = new ConversationLoggerMiddleware({
-  logPath: '.zenode/conversation-logs',
-  enabled: true
-});
+// Path and settings are loaded from configuration
+const conversationLogger = new ConversationLoggerMiddleware();
 middlewarePipeline.register(conversationLogger);
 
 /**
@@ -249,7 +249,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Create middleware context for this request
   const context: ToolContext = {
     toolName: name,
-    requestId: `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    requestId: `req-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
     timestamp: new Date(),
     input: args,
     conversationId: args?.continuation_id as string | undefined,

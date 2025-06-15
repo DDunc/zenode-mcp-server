@@ -5,10 +5,8 @@ export function setupMiddleware() {
   const pipeline = new DefaultMiddlewarePipeline();
   
   // Register the conversation logger middleware
-  const conversationLogger = new ConversationLoggerMiddleware({
-    logPath: '.zenode/conversation-logs',
-    enabled: true
-  });
+  // Configuration will be loaded automatically from config files
+  const conversationLogger = new ConversationLoggerMiddleware();
   
   pipeline.register(conversationLogger);
   

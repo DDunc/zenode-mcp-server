@@ -43,7 +43,10 @@
       "Bash(true)",
       "Bash(node:*)",
       "Bash(rg:*)",
-      "Bash(./get-logs.sh:*)"
+      "Bash(./get-logs.sh:*)",
+      "Bash(npm install:*)",
+      "Bash(ollama:*)",
+      "Bash(./scripts/setup-local-ai.sh:*)"
     ],
     "deny": []
   }

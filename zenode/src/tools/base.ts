@@ -360,6 +360,8 @@ export abstract class BaseTool {
    * Auto-detect and read files mentioned in the prompt
    */
   protected async autoReadFilesFromPrompt(prompt: string): Promise<Record<string, string>> {
+    logger.info(`Auto file reading called with prompt length: ${prompt.length}`);
+    
     // Extract file paths from prompt using various patterns
     const filePathPatterns = [
       // Absolute paths: /path/to/file.ext
@@ -390,6 +392,7 @@ export abstract class BaseTool {
       return await this.readFilesSecurely(Array.from(detectedFiles));
     }
 
+    logger.info('No files auto-detected in prompt');
     return {};
   }
 

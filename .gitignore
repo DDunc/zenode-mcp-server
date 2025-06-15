@@ -169,3 +169,11 @@ test-setup/
 
 # Scratch feature documentation files
 FEATURE_*.md
+
+# Zenode generated files
+zenode/.zenode/conversation-logs/
+zenode/.local-model
+zenode/.zenode/test-volume-mount.txt
+*.conversation.log
+*.mcp.log
+mcp_*.log

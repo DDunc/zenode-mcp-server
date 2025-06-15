@@ -1,6 +1,85 @@
-# Zenode MCP Server
+# [Zenode MCP Server](https://github.com/yourusername/zen-mcp-server)
 
-A high-performance Node.js implementation of the Model Context Protocol (MCP) server that orchestrates multiple AI models for enhanced code analysis and development workflows.
+🚧 **Under Active Development** - This is a preview release. Features and APIs may change.
+
+A high-performance Node.js implementation of the Model Context Protocol (MCP) server port of the awesome python [zen-mcp-server] that orchestrates multiple AI models for enhanced code analysis and development workflows. Zenode adds features for those more familiar with a TS/Node.js environment: typescript types, express.js style middleware, and the ability to add tools and middlewares as npm packages.
+
+This unusual folder structure is temporary but beneficial for LLM and agent-assisted coding. One intent of this project is to continually pull and port improvements from  zen-mcp-server upstream.
+
+# Who Should Use This Library
+* Anyone interested in building their own mcp-tools, plugins, etc in Node.js with the help of an agency framework
+* Anyone interested in previewing a project under rapid development with an experimental approach to QoL tooling, composition, and extension
+
+## 🚀 Quick Start
+
+**Get running in 3 minutes:**
+
+1. **Clone and setup**:
+   ```bash
+   git clone https://github.com/yourusername/zen-mcp-server.git
+   cd zen-mcp-server/zenode
+   cp .env.example .env
+   ```
+
+2. **Add your API key** (choose one):
+   ```bash
+   # Edit .env file and add at least one:
+   GEMINI_API_KEY=your_gemini_api_key_here
+   OPENAI_API_KEY=your_openai_api_key_here  
+   OPENROUTER_API_KEY=your_openrouter_api_key_here
+   ```
+
+3. **Start with Docker** (recommended):
+   ```bash
+   docker-compose up -d
+   ```
+   
+   **Or run locally**:
+   ```bash
+   npm install
+   docker run -d -p 6379:6379 redis:7-alpine  # Start Redis
+   npm run build && npm start
+   ```
+
+4. **Verify it's working**:
+   ```bash
+   curl http://localhost:8080/health  # Should return {"status":"healthy"}
+   ```
+
+5. **Connect to Claude** (choose one):
+
+   **🌟 Claude Code (Recommended)** - Best experience with native MCP support:
+   ```bash
+   # Install Claude Code CLI
+   curl -fsSL https://claude.ai/install.sh | sh
+   
+   # Add zenode server to your project
+   echo 'zenode node /path/to/zen-mcp-server/zenode/dist/index.js' >> .claudemcp
+   
+   # Set your API key
+   export OPENROUTER_API_KEY=your_key_here
+   export MCP_WORKSPACE=$(pwd)
+   ```
+   
+   **Claude Desktop** - Add to your `claude_desktop_config.json`:
+   ```json
+   {
+     "mcpServers": {
+       "zenode": {
+         "command": "node",
+         "args": ["/path/to/zen-mcp-server/zenode/dist/index.js"],
+         "env": {
+           "OPENROUTER_API_KEY": "your_key_here",
+           "MCP_WORKSPACE": "/path/to/your/workspace"
+         }
+       }
+     }
+   }
+   ```
+
+**That's it!** Now use `:z "u up?"` to have your first round-table discussion between specialized prompts running the best model for their purpose.
+
+---
 
 ## Features
 
@@ -28,7 +107,7 @@ At least one of the following API configurations is required:
 
 ## Installation
 
-### Option 1: Docker (Recommended)
+### Option 1: Docker (Recommended + you can ask Claude to do this for you!)
 
 1. Clone the repository:
 ```bash
@@ -121,18 +200,19 @@ Models can be configured via `conf/custom_models.json`:
 ### Provider Priority
 
 When multiple providers are configured, the system selects models in this order:
-1. Native APIs (Gemini, OpenAI) - Most efficient
+1. Native APIs (Gemini, OpenAI)
 2. Custom endpoints - For local/private models
 3. OpenRouter - Catch-all for other models
 
 ## Usage
 
-### With Claude Desktop
+### With Claude Desktop (you can ask Claude to do this for you!)
 
 1. Open Claude Desktop configuration file:
    - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
    - **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
    - **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
 
 2. Add the Zenode server configuration:
 
@@ -199,6 +279,12 @@ General file and code analysis
 Comprehensive test generation with edge cases
 ```
 @zenode.testgen "Generate tests for the User authentication module"
+```
+
+#### 8. Gopher
+Local file access bridge for containerized tools
+```
+@zenode.gopher "Read and analyze project structure"
 ```
 
 ### Thinking Modes
@@ -269,6 +355,35 @@ npm run build
 # Clean build artifacts
 npm run clean
 ```
+
+## Middleware
+
+The zenode server includes a middleware pipeline for request processing and logging:
+
+### Conversation Logger
+Logs all AI conversations for debugging and analysis:
+- Records request/response pairs with timestamps
+- Supports different log levels and formats
+- Persists conversation threads for troubleshooting
+- Configurable via `LOG_LEVEL` environment variable
+
+Example configuration:
+```typescript
+// src/middleware/conversation-logger.ts
+export const conversationLogger = {
+  logLevel: process.env.LOG_LEVEL || 'INFO',
+  persistThreads: true,
+  includeTokenCounts: true
+};
+```
+
+### Pipeline Architecture
+The middleware pipeline processes requests in order:
+1. **Request validation** - Validates MCP protocol messages
+2. **Conversation tracking** - Manages conversation threads and continuity
+3. **Logging middleware** - Records requests and responses
+4. **Tool routing** - Routes to appropriate AI tools
+5. **Response formatting** - Formats responses for MCP protocol
 
 ## Deployment
 
