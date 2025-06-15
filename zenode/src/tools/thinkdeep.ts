@@ -48,11 +48,12 @@ export class ThinkDeepTool extends BaseTool {
   name = 'thinkdeep';
   
   description = 
-    'EXTENDED THINKING & REASONING - Your deep thinking partner for complex problems. ' +
+    'EXTENDED THINKING & REASONING - Deep thinking partner for complex problems. ' +
+    'IMPORTANT: This tool MUST be used when explicitly invoked (e.g., "zenode:thinkdeep [problem]"). ' +
     'Use this when you need to think deeper about a problem, extend your analysis, explore alternatives, or validate approaches. ' +
     'Perfect for: architecture decisions, complex bugs, performance challenges, security analysis. ' +
-    'I\'ll challenge assumptions, find edge cases, and provide alternative solutions. ' +
-    'IMPORTANT: Choose the appropriate thinking_mode based on task complexity - ' +
+    'Will challenge assumptions, find edge cases, and provide alternative solutions. ' +
+    'Choose the appropriate thinking_mode based on task complexity - ' +
     '\'low\' for quick analysis, \'medium\' for standard problems, \'high\' for complex issues (default), ' +
     '\'max\' for extremely complex challenges requiring deepest analysis. ' +
     'When in doubt, err on the side of a higher mode for truly deep thought and evaluation. ' +

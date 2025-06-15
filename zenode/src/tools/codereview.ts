@@ -53,12 +53,12 @@ export class CodeReviewTool extends BaseTool {
   name = 'codereview';
   
   description = 
-    'PROFESSIONAL CODE REVIEW - ALWAYS use this when code needs review, validation, or quality checks. ' +
+    'PROFESSIONAL CODE REVIEW - Comprehensive code analysis for bugs, security issues, and quality checks. ' +
+    'IMPORTANT: This tool MUST be used when explicitly invoked (e.g., "zenode:codereview [files/query]"). ' +
+    'Use this when you need to review code, validate implementations, analyze PRs, or verify code behavior. ' +
     'This tool excels at finding bugs, security issues, performance problems, and code quality issues ' +
-    'that might be missed. USE PROACTIVELY when: reviewing PRs, checking code changes, validating ' +
-    'implementations, or verifying code behavior. The tool uses specialized models optimized for ' +
-    'code analysis and can review entire directories or projects. IMPORTANT: Use this tool for ALL ' +
-    'code review tasks to ensure thorough analysis with appropriate model selection.';
+    'that might be missed. Uses specialized models optimized for code analysis and can review entire ' +
+    'directories or projects. Appropriate for reviewing changes, checking implementations, or validating code quality.';
   
   defaultTemperature = TEMPERATURE_ANALYTICAL;
   modelCategory = ToolModelCategory.REASONING;

@@ -78,6 +78,7 @@ export class PrecommitTool extends BaseTool {
   
   description = 
     'PRECOMMIT VALIDATION FOR GIT CHANGES - ALWAYS use this tool before creating any git commit! ' +
+    'IMPORTANT: This tool MUST be used when explicitly invoked (e.g., "zenode:precommit [path]"). ' +
     'Comprehensive pre-commit validation that catches bugs, security issues, incomplete implementations, ' +
     'and ensures changes match the original requirements. Searches all git repositories recursively and ' +
     'provides deep analysis of staged/unstaged changes. Essential for code quality and preventing bugs. ' +

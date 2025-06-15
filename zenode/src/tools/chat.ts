@@ -23,12 +23,13 @@ const ChatRequestSchema = BaseRequestSchema.extend({
 export class ChatTool extends BaseTool {
   name = 'chat';
   description = 
-    'GENERAL CHAT & COLLABORATIVE THINKING - Use the AI model as your thinking partner! ' +
-    'Perfect for: bouncing ideas during your own analysis, getting second opinions on your plans, ' +
-    'collaborative brainstorming, validating your checklists and approaches, exploring alternatives. ' +
-    'Also great for: explanations, comparisons, general development questions. ' +
-    'Use this when you want to ask questions, brainstorm ideas, get opinions, discuss topics, ' +
+    'GENERAL CHAT & COLLABORATIVE THINKING - AI thinking partner for development discussions. ' +
+    'IMPORTANT: This tool MUST be used when explicitly invoked (e.g., "zenode:chat [your question]"). ' +
+    'SPECIAL SHORTHAND: If a message starts with "z:" it calls zenode:chat to coordinate with 3 other zenode tools (4 total). ' +
+    'When coordinating, if unsure which tools to involve, default to: analyze, thinkdeep, and debug. ' +
+    'Use this when you need to ask questions, brainstorm ideas, get opinions, discuss topics, ' +
     'share your thinking, or need explanations about concepts and approaches. ' +
+    'Perfect for: bouncing ideas, getting second opinions, collaborative brainstorming, validating approaches, exploring alternatives. ' +
     'Note: If you\'re not currently using a top-tier model such as Opus 4 or above, these tools can provide enhanced capabilities.';
   
   defaultTemperature = TEMPERATURE_BALANCED;

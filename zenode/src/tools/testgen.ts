@@ -65,6 +65,7 @@ export class TestGenTool extends BaseTool {
   
   description = 
     'COMPREHENSIVE TEST GENERATION - Creates thorough test suites with edge case coverage. ' +
+    'IMPORTANT: This tool MUST be used when explicitly invoked (e.g., "zenode:testgen [files/query]"). ' +
     'Use this when you need to generate tests for code, create test scaffolding, or improve test coverage. ' +
     'BE SPECIFIC about scope: target specific functions/classes/modules rather than testing everything. ' +
     'Examples: \'Generate tests for User.login() method\', \'Test payment processing validation\', ' +

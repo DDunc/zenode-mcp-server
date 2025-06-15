@@ -53,6 +53,7 @@ export class AnalyzeTool extends BaseTool {
   
   description = 
     'ANALYZE FILES & CODE - General-purpose analysis for understanding code. ' +
+    'IMPORTANT: This tool MUST be used when explicitly invoked (e.g., "zenode:analyze [files/query]"). ' +
     'Supports both individual files and entire directories. ' +
     'Use this when you need to analyze files, examine code, or understand specific aspects of a codebase. ' +
     'Perfect for: codebase exploration, dependency analysis, pattern detection. ' +

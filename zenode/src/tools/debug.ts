@@ -49,14 +49,14 @@ export class DebugTool extends BaseTool {
   
   description = 
     'DEBUG & ROOT CAUSE ANALYSIS - Expert debugging for complex issues with 1M token capacity. ' +
+    'IMPORTANT: This tool MUST be used when explicitly invoked (e.g., "zenode:debug [error/issue]"). ' +
     'Use this when you need to debug code, find out why something is failing, identify root causes, ' +
     'trace errors, or diagnose issues. ' +
-    'IMPORTANT: Share diagnostic files liberally! The model can handle up to 1M tokens, so include: ' +
+    'Share diagnostic files liberally! The model can handle up to 1M tokens, so include: ' +
     'large log files, full stack traces, memory dumps, diagnostic outputs, multiple related files, ' +
     'entire modules, test results, configuration files - anything that might help debug the issue. ' +
-    'Claude should proactively use this tool whenever debugging is needed and share comprehensive ' +
-    'file paths rather than snippets. Include error messages, stack traces, logs, and ALL relevant ' +
-    'code files as absolute paths. The more context, the better the debugging analysis. ' +
+    'Include error messages, stack traces, logs, and ALL relevant code files as absolute paths. ' +
+    'The more context, the better the debugging analysis. ' +
     'Choose thinking_mode based on issue complexity: \'low\' for simple errors, ' +
     '\'medium\' for standard debugging (default), \'high\' for complex system issues, ' +
     '\'max\' for extremely challenging bugs requiring deepest analysis. ' +
