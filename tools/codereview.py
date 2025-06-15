@@ -16,14 +16,12 @@ Key Features:
 
 from typing import Any, Optional
 
-from mcp.types import TextContent
 from pydantic import Field
 
 from config import TEMPERATURE_ANALYTICAL
 from systemprompts import CODEREVIEW_PROMPT
 
 from .base import BaseTool, ToolRequest
-from .models import ToolOutput
 
 
 class CodeReviewRequest(ToolRequest):
@@ -148,23 +146,10 @@ class CodeReviewTool(BaseTool):
     def get_default_temperature(self) -> float:
         return TEMPERATURE_ANALYTICAL
 
+    # Line numbers are enabled by default from base class for precise feedback
+
     def get_request_model(self):
         return CodeReviewRequest
-
-    async def execute(self, arguments: dict[str, Any]) -> list[TextContent]:
-        """Override execute to check focus_on size before processing"""
-        # First validate request
-        request_model = self.get_request_model()
-        request = request_model(**arguments)
-
-        # Check focus_on size if provided
-        if request.focus_on:
-            size_check = self.check_prompt_size(request.focus_on)
-            if size_check:
-                return [TextContent(type="text", text=ToolOutput(**size_check).model_dump_json())]
-
-        # Continue with normal execution
-        return await super().execute(arguments)
 
     async def prepare_prompt(self, request: CodeReviewRequest) -> str:
         """
@@ -193,9 +178,26 @@ class CodeReviewTool(BaseTool):
         if updated_files is not None:
             request.files = updated_files
 
+        # Check user input size at MCP transport boundary (before adding internal content)
+        user_content = request.prompt
+        size_check = self.check_prompt_size(user_content)
+        if size_check:
+            from tools.models import ToolOutput
+
+            raise ValueError(f"MCP_SIZE_CHECK:{ToolOutput(**size_check).model_dump_json()}")
+
+        # Also check focus_on field if provided (user input)
+        if request.focus_on:
+            focus_size_check = self.check_prompt_size(request.focus_on)
+            if focus_size_check:
+                from tools.models import ToolOutput
+
+                raise ValueError(f"MCP_SIZE_CHECK:{ToolOutput(**focus_size_check).model_dump_json()}")
+
         # Use centralized file processing logic
         continuation_id = getattr(request, "continuation_id", None)
-        file_content = self._prepare_file_content_for_prompt(request.files, continuation_id, "Code")
+        file_content, processed_files = self._prepare_file_content_for_prompt(request.files, continuation_id, "Code")
+        self._actually_processed_files = processed_files
 
         # Build customized review instructions based on review type
         review_focus = []

@@ -11,7 +11,6 @@ This provides comprehensive context for AI analysis - not a duplication bug.
 import os
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
-from mcp.types import TextContent
 from pydantic import Field
 
 if TYPE_CHECKING:
@@ -23,7 +22,6 @@ from utils.git_utils import find_git_repositories, get_git_status, run_git_comma
 from utils.token_utils import estimate_tokens
 
 from .base import BaseTool, ToolRequest
-from .models import ToolOutput
 
 # Conservative fallback for token limits
 DEFAULT_CONTEXT_WINDOW = 200_000
@@ -38,7 +36,7 @@ class PrecommitRequest(ToolRequest):
     )
     prompt: Optional[str] = Field(
         None,
-        description="The original user request description for the changes. Provides critical context for the review.",
+        description="The original user request description for the changes. Provides critical context for the review. If original request is limited or not available, Claude MUST study the changes carefully, think deeply about the implementation intent, analyze patterns across all modifications, infer the logic and requirements from the code changes and provide a thorough starting point.",
     )
     compare_to: Optional[str] = Field(
         None,
@@ -97,6 +95,9 @@ class Precommit(BaseTool):
             "Use this before committing, when reviewing changes, checking your changes, validating changes, "
             "or when you're about to commit or ready to commit. Claude should proactively suggest using this tool "
             "whenever the user mentions committing or when changes are complete. "
+            "When original request context is unavailable, Claude MUST think deeply about implementation intent, "
+            "analyze patterns across modifications, infer business logic and requirements from code changes, "
+            "and provide comprehensive insights about what was accomplished and completion status. "
             "Choose thinking_mode based on changeset size: 'low' for small focused changes, "
             "'medium' for standard commits (default), 'high' for large feature branches or complex refactoring, "
             "'max' for critical releases or when reviewing extensive changes across multiple systems. "
@@ -116,7 +117,7 @@ class Precommit(BaseTool):
                 "model": self.get_model_field_schema(),
                 "prompt": {
                     "type": "string",
-                    "description": "The original user request description for the changes. Provides critical context for the review.",
+                    "description": "The original user request description for the changes. Provides critical context for the review. If original request is limited or not available, Claude MUST study the changes carefully, think deeply about the implementation intent, analyze patterns across all modifications, infer the logic and requirements from the code changes and provide a thorough starting point.",
                 },
                 "compare_to": {
                     "type": "string",
@@ -201,21 +202,6 @@ class Precommit(BaseTool):
 
         return ToolModelCategory.EXTENDED_REASONING
 
-    async def execute(self, arguments: dict[str, Any]) -> list[TextContent]:
-        """Override execute to check original_request size before processing"""
-        # First validate request
-        request_model = self.get_request_model()
-        request = request_model(**arguments)
-
-        # Check prompt size if provided
-        if request.prompt:
-            size_check = self.check_prompt_size(request.prompt)
-            if size_check:
-                return [TextContent(type="text", text=ToolOutput(**size_check).model_dump_json())]
-
-        # Continue with normal execution
-        return await super().execute(arguments)
-
     async def prepare_prompt(self, request: PrecommitRequest) -> str:
         """Prepare the prompt with git diff information."""
         # Check for prompt.txt in files
@@ -228,6 +214,14 @@ class Precommit(BaseTool):
         # Update request files list
         if updated_files is not None:
             request.files = updated_files
+
+        # Check user input size at MCP transport boundary (before adding internal content)
+        user_content = request.prompt if request.prompt else ""
+        size_check = self.check_prompt_size(user_content)
+        if size_check:
+            from tools.models import ToolOutput
+
+            raise ValueError(f"MCP_SIZE_CHECK:{ToolOutput(**size_check).model_dump_json()}")
 
         # Translate the path and files if running in Docker
         translated_path = translate_path_for_environment(request.path)
@@ -417,13 +411,14 @@ class Precommit(BaseTool):
             remaining_tokens = max_tokens - total_tokens
 
             # Use centralized file handling with filtering for duplicate prevention
-            file_content = self._prepare_file_content_for_prompt(
+            file_content, processed_files = self._prepare_file_content_for_prompt(
                 translated_files,
                 request.continuation_id,
                 "Context files",
                 max_tokens=remaining_tokens + 1000,  # Add back the reserve that was calculated
                 reserve_tokens=1000,  # Small reserve for formatting
             )
+            self._actually_processed_files = processed_files
 
             if file_content:
                 context_tokens = estimate_tokens(file_content)

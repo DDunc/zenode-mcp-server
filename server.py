@@ -24,7 +24,7 @@ import os
 import sys
 import time
 from datetime import datetime
-from logging.handlers import RotatingFileHandler, TimedRotatingFileHandler
+from logging.handlers import RotatingFileHandler
 from typing import Any
 
 from mcp.server import Server
@@ -44,8 +44,10 @@ from tools import (
     CodeReviewTool,
     DebugIssueTool,
     Precommit,
+    RefactorTool,
     TestGenTool,
     ThinkDeepTool,
+    TracerTool,
 )
 from tools.models import ToolOutput
 
@@ -70,55 +72,59 @@ class LocalTimeFormatter(logging.Formatter):
 
 # Configure both console and file logging
 log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-logging.basicConfig(
-    level=getattr(logging, log_level, logging.INFO),
-    format=log_format,
-    force=True,  # Force reconfiguration if already configured
-    stream=sys.stderr,  # Use stderr to avoid interfering with MCP stdin/stdout protocol
-)
 
-# Apply local time formatter to root logger
-for handler in logging.getLogger().handlers:
-    handler.setFormatter(LocalTimeFormatter(log_format))
+# Clear any existing handlers first
+root_logger = logging.getLogger()
+root_logger.handlers.clear()
+
+# Create and configure stderr handler explicitly
+stderr_handler = logging.StreamHandler(sys.stderr)
+stderr_handler.setLevel(getattr(logging, log_level, logging.INFO))
+stderr_handler.setFormatter(LocalTimeFormatter(log_format))
+root_logger.addHandler(stderr_handler)
+
+# Note: MCP stdio_server interferes with stderr during tool execution
+# All logs are properly written to /tmp/mcp_server.log for monitoring
+
+# Set root logger level
+root_logger.setLevel(getattr(logging, log_level, logging.INFO))
 
 # Add rotating file handler for Docker log monitoring
 
 try:
-    # Main server log with daily rotation (keep 7 days of logs)
-    # Using 'midnight' interval rotates at midnight each day
-    # Filename will have date suffix like mcp_server.log.2024-06-14
-    file_handler = TimedRotatingFileHandler(
+    # Main server log with size-based rotation (20MB max per file)
+    # This ensures logs don't grow indefinitely and are properly managed
+    file_handler = RotatingFileHandler(
         "/tmp/mcp_server.log",
-        when="midnight",  # Rotate at midnight
-        interval=1,  # Every 1 day
-        backupCount=7,  # Keep 7 days of logs
+        maxBytes=20 * 1024 * 1024,  # 20MB max file size
+        backupCount=10,  # Keep 10 rotated files (200MB total)
         encoding="utf-8",
     )
     file_handler.setLevel(getattr(logging, log_level, logging.INFO))
     file_handler.setFormatter(LocalTimeFormatter(log_format))
-    # Add suffix pattern for rotated files
-    file_handler.suffix = "%Y-%m-%d"
     logging.getLogger().addHandler(file_handler)
 
-    # Create a special logger for MCP activity tracking with daily rotation
+    # Create a special logger for MCP activity tracking with size-based rotation
     mcp_logger = logging.getLogger("mcp_activity")
-    mcp_file_handler = TimedRotatingFileHandler(
+    mcp_file_handler = RotatingFileHandler(
         "/tmp/mcp_activity.log",
-        when="midnight",  # Rotate at midnight
-        interval=1,  # Every 1 day
-        backupCount=7,  # Keep 7 days of logs
+        maxBytes=20 * 1024 * 1024,  # 20MB max file size
+        backupCount=5,  # Keep 5 rotated files (100MB total)
         encoding="utf-8",
     )
     mcp_file_handler.setLevel(logging.INFO)
     mcp_file_handler.setFormatter(LocalTimeFormatter("%(asctime)s - %(message)s"))
-    mcp_file_handler.suffix = "%Y-%m-%d"
     mcp_logger.addHandler(mcp_file_handler)
     mcp_logger.setLevel(logging.INFO)
+    # Ensure MCP activity also goes to stderr
+    mcp_logger.propagate = True
 
     # Also keep a size-based rotation as backup (100MB max per file)
     # This prevents any single day's log from growing too large
     size_handler = RotatingFileHandler(
-        "/tmp/mcp_server_overflow.log", maxBytes=100 * 1024 * 1024, backupCount=3  # 100MB
+        "/tmp/mcp_server_overflow.log",
+        maxBytes=100 * 1024 * 1024,
+        backupCount=3,  # 100MB
     )
     size_handler.setLevel(logging.WARNING)  # Only warnings and errors
     size_handler.setFormatter(LocalTimeFormatter(log_format))
@@ -144,6 +150,8 @@ TOOLS = {
     "chat": ChatTool(),  # Interactive development chat and brainstorming
     "precommit": Precommit(),  # Pre-commit validation of git changes
     "testgen": TestGenTool(),  # Comprehensive test generation with edge case coverage
+    "refactor": RefactorTool(),  # Intelligent code refactoring suggestions with precise line references
+    "tracer": TracerTool(),  # Static call path prediction and control flow analysis
 }
 
 
@@ -163,6 +171,7 @@ def configure_providers():
     from providers.gemini import GeminiModelProvider
     from providers.openai import OpenAIModelProvider
     from providers.openrouter import OpenRouterProvider
+    from providers.xai import XAIModelProvider
     from utils.model_restrictions import get_restriction_service
 
     valid_providers = []
@@ -183,6 +192,13 @@ def configure_providers():
         valid_providers.append("OpenAI (o3)")
         has_native_apis = True
         logger.info("OpenAI API key found - o3 model available")
+
+    # Check for X.AI API key
+    xai_key = os.getenv("XAI_API_KEY")
+    if xai_key and xai_key != "your_xai_api_key_here":
+        valid_providers.append("X.AI (GROK)")
+        has_native_apis = True
+        logger.info("X.AI API key found - GROK models available")
 
     # Check for OpenRouter API key
     openrouter_key = os.getenv("OPENROUTER_API_KEY")
@@ -215,6 +231,8 @@ def configure_providers():
             ModelProviderRegistry.register_provider(ProviderType.GOOGLE, GeminiModelProvider)
         if openai_key and openai_key != "your_openai_api_key_here":
             ModelProviderRegistry.register_provider(ProviderType.OPENAI, OpenAIModelProvider)
+        if xai_key and xai_key != "your_xai_api_key_here":
+            ModelProviderRegistry.register_provider(ProviderType.XAI, XAIModelProvider)
 
     # 2. Custom provider second (for local/private models)
     if has_custom:
@@ -236,6 +254,7 @@ def configure_providers():
             "At least one API configuration is required. Please set either:\n"
             "- GEMINI_API_KEY for Gemini models\n"
             "- OPENAI_API_KEY for OpenAI o3 model\n"
+            "- XAI_API_KEY for X.AI GROK models\n"
             "- OPENROUTER_API_KEY for OpenRouter (multiple models)\n"
             "- CUSTOM_API_URL for local models (Ollama, vLLM, etc.)"
         )

@@ -105,6 +105,7 @@ class BaseTool(ABC):
         self.name = self.get_name()
         self.description = self.get_description()
         self.default_temperature = self.get_default_temperature()
+        # Tool initialization complete
 
     @abstractmethod
     def get_name(self) -> str:
@@ -169,14 +170,14 @@ class BaseTool(ABC):
         Returns:
             bool: True if model parameter should be required in the schema
         """
-        from config import DEFAULT_MODEL, IS_AUTO_MODE
+        from config import DEFAULT_MODEL
         from providers.registry import ModelProviderRegistry
 
         # Case 1: Explicit auto mode
-        if IS_AUTO_MODE:
+        if DEFAULT_MODEL.lower() == "auto":
             return True
 
-        # Case 2: Model not available
+        # Case 2: Model not available (fallback to auto mode)
         if DEFAULT_MODEL.lower() != "auto":
             provider = ModelProviderRegistry.get_provider_for_model(DEFAULT_MODEL)
             if not provider:
@@ -207,9 +208,7 @@ class BaseTool(ABC):
         provider = ModelProviderRegistry.get_provider_for_model(model_name)
         if not provider:
             logger = logging.getLogger(f"tools.{self.name}")
-            logger.warning(
-                f"Model '{model_name}' is not available with current API keys. " f"Requiring model selection."
-            )
+            logger.warning(f"Model '{model_name}' is not available with current API keys. Requiring model selection.")
             return True
 
         return False
@@ -397,6 +396,27 @@ class BaseTool(ABC):
         """
         return 0.5
 
+    def wants_line_numbers_by_default(self) -> bool:
+        """
+        Return whether this tool wants line numbers added to code files by default.
+
+        By default, ALL tools get line numbers for precise code references.
+        Line numbers are essential for accurate communication about code locations.
+
+        Line numbers add ~8-10% token overhead but provide precise targeting for:
+        - Code review feedback ("SQL injection on line 45")
+        - Debug error locations ("Memory leak in loop at lines 123-156")
+        - Test generation targets ("Generate tests for method at lines 78-95")
+        - Refactoring guidance ("Extract method from lines 67-89")
+        - General code discussions ("Where is X defined?" -> "Line 42")
+
+        The only exception is when reading diffs, which have their own line markers.
+
+        Returns:
+            bool: True if line numbers should be added by default for this tool
+        """
+        return True  # All tools get line numbers by default for consistency
+
     def get_default_thinking_mode(self) -> str:
         """
         Return the default thinking mode for this tool.
@@ -524,7 +544,7 @@ class BaseTool(ABC):
         reserve_tokens: int = 1_000,
         remaining_budget: Optional[int] = None,
         arguments: Optional[dict] = None,
-    ) -> str:
+    ) -> tuple[str, list[str]]:
         """
         Centralized file processing for tool prompts.
 
@@ -543,10 +563,13 @@ class BaseTool(ABC):
             arguments: Original tool arguments (used to extract _remaining_tokens if available)
 
         Returns:
-            str: Formatted file content string ready for prompt inclusion
+            tuple[str, list[str]]: (formatted_file_content, actually_processed_files)
+                - formatted_file_content: Formatted file content string ready for prompt inclusion
+                - actually_processed_files: List of individual file paths that were actually read and embedded
+                  (directories are expanded to individual files)
         """
         if not request_files:
-            return ""
+            return "", []
 
         # Note: Even if conversation history is already embedded, we still need to process
         # any NEW files that aren't in the conversation history yet. The filter_new_files
@@ -685,6 +708,7 @@ class BaseTool(ABC):
             )
 
         content_parts = []
+        actually_processed_files = []
 
         # Read content of new files only
         if files_to_embed:
@@ -693,11 +717,25 @@ class BaseTool(ABC):
                 f"[FILES] {self.name}: Starting file embedding with token budget {effective_max_tokens + reserve_tokens:,}"
             )
             try:
+                # Before calling read_files, expand directories to get individual file paths
+                from utils.file_utils import expand_paths
+
+                expanded_files = expand_paths(files_to_embed)
+                logger.debug(
+                    f"[FILES] {self.name}: Expanded {len(files_to_embed)} paths to {len(expanded_files)} individual files"
+                )
+
                 file_content = read_files(
-                    files_to_embed, max_tokens=effective_max_tokens + reserve_tokens, reserve_tokens=reserve_tokens
+                    files_to_embed,
+                    max_tokens=effective_max_tokens + reserve_tokens,
+                    reserve_tokens=reserve_tokens,
+                    include_line_numbers=self.wants_line_numbers_by_default(),
                 )
                 self._validate_token_limit(file_content, context_description)
                 content_parts.append(file_content)
+
+                # Track the expanded files as actually processed
+                actually_processed_files.extend(expanded_files)
 
                 # Estimate tokens for debug logging
                 from utils.token_utils import estimate_tokens
@@ -707,6 +745,9 @@ class BaseTool(ABC):
                     f"{self.name} tool successfully embedded {len(files_to_embed)} files ({content_tokens:,} tokens)"
                 )
                 logger.debug(f"[FILES] {self.name}: Successfully embedded files - {content_tokens:,} tokens used")
+                logger.debug(
+                    f"[FILES] {self.name}: Actually processed {len(actually_processed_files)} individual files"
+                )
             except Exception as e:
                 logger.error(f"{self.name} tool failed to embed files {files_to_embed}: {type(e).__name__}: {e}")
                 logger.debug(f"[FILES] {self.name}: File embedding failed - {type(e).__name__}: {e}")
@@ -736,8 +777,10 @@ class BaseTool(ABC):
                 logger.debug(f"[FILES] {self.name}: No skipped files to note")
 
         result = "".join(content_parts) if content_parts else ""
-        logger.debug(f"[FILES] {self.name}: _prepare_file_content_for_prompt returning {len(result)} chars")
-        return result
+        logger.debug(
+            f"[FILES] {self.name}: _prepare_file_content_for_prompt returning {len(result)} chars, {len(actually_processed_files)} processed files"
+        )
+        return result, actually_processed_files
 
     def get_websearch_instruction(self, use_websearch: bool, tool_specific: Optional[str] = None) -> str:
         """
@@ -839,16 +882,36 @@ When recommending searches, be specific about what information you need and why 
 
     def check_prompt_size(self, text: str) -> Optional[dict[str, Any]]:
         """
-        Check if a text field is too large for MCP's token limits.
+        Check if USER INPUT text is too large for MCP transport boundary.
+
+        IMPORTANT: This method should ONLY be used to validate user input that crosses
+        the Claude CLI ↔ MCP Server transport boundary. It should NOT be used to limit
+        internal MCP Server operations.
+
+        MCP Protocol Boundaries:
+        Claude CLI ←→ MCP Server ←→ External Model
+            ↑                              ↑
+        This limit applies here      This is NOT limited
 
         The MCP protocol has a combined request+response limit of ~25K tokens.
-        To ensure adequate space for responses, we limit prompt input to a
-        configurable character limit (default 50K chars ~= 10-12K tokens).
-        Larger prompts are handled by having Claude save them to a file,
-        bypassing MCP's token constraints while preserving response capacity.
+        To ensure adequate space for MCP Server → Claude CLI responses, we limit
+        user input to 50K characters (roughly ~10-12K tokens). Larger user prompts
+        are handled by having Claude save them to prompt.txt files, bypassing MCP's
+        transport constraints while preserving response capacity.
+
+        What should be checked with this method:
+        - request.prompt field (user input from Claude CLI)
+        - prompt.txt file content (alternative user input)
+        - Other direct user input fields
+
+        What should NOT be checked with this method:
+        - System prompts added internally
+        - File content embedded by tools
+        - Conversation history from Redis
+        - Complete prompts sent to external models
 
         Args:
-            text: The text to check
+            text: The user input text to check (NOT internal prompt content)
 
         Returns:
             Optional[Dict[str, Any]]: Response asking for file handling if too large, None otherwise
@@ -1130,6 +1193,12 @@ When recommending searches, be specific about what information you need and why 
             logger = logging.getLogger(f"tools.{self.name}")
             error_msg = str(e)
 
+            # Check if this is an MCP size check error from prepare_prompt
+            if error_msg.startswith("MCP_SIZE_CHECK:"):
+                logger.info(f"MCP prompt size limit exceeded in {self.name}")
+                tool_output_json = error_msg[15:]  # Remove "MCP_SIZE_CHECK:" prefix
+                return [TextContent(type="text", text=tool_output_json)]
+
             # Check if this is a 500 INTERNAL error that asks for retry
             if "500 INTERNAL" in error_msg and "Please retry" in error_msg:
                 logger.warning(f"500 INTERNAL error in {self.name} - attempting retry")
@@ -1359,7 +1428,9 @@ When recommending searches, be specific about what information you need and why 
             )
 
             # Add this response as the first turn (assistant turn)
-            request_files = getattr(request, "files", []) or []
+            # Use actually processed files from file preparation instead of original request files
+            # This ensures directories are tracked as their individual expanded files
+            request_files = getattr(self, "_actually_processed_files", []) or getattr(request, "files", []) or []
             # Extract model metadata
             model_provider = None
             model_name = None

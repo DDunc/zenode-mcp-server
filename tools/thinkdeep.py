@@ -4,7 +4,6 @@ ThinkDeep tool - Extended reasoning and problem-solving
 
 from typing import TYPE_CHECKING, Any, Optional
 
-from mcp.types import TextContent
 from pydantic import Field
 
 if TYPE_CHECKING:
@@ -14,14 +13,18 @@ from config import TEMPERATURE_CREATIVE
 from systemprompts import THINKDEEP_PROMPT
 
 from .base import BaseTool, ToolRequest
-from .models import ToolOutput
 
 
 class ThinkDeepRequest(ToolRequest):
     """Request model for thinkdeep tool"""
 
-    prompt: str = Field(..., description="Your current thinking/analysis to extend and validate")
-    problem_context: Optional[str] = Field(None, description="Additional context about the problem or goal")
+    prompt: str = Field(
+        ...,
+        description="Your current thinking/analysis to extend and validate. IMPORTANT: Before using this tool, Claude MUST first think hard and establish a deep understanding of the topic and question by thinking through all relevant details, context, constraints, and implications. Share these extended thoughts and ideas in the prompt so the model has comprehensive information to work with for the best analysis.",
+    )
+    problem_context: Optional[str] = Field(
+        None, description="Additional context about the problem or goal. Be as expressive as possible."
+    )
     focus_areas: Optional[list[str]] = Field(
         None,
         description="Specific aspects to focus on (architecture, performance, security, etc.)",
@@ -57,12 +60,12 @@ class ThinkDeepTool(BaseTool):
             "properties": {
                 "prompt": {
                     "type": "string",
-                    "description": "Your current thinking/analysis to extend and validate",
+                    "description": "Your current thinking/analysis to extend and validate. IMPORTANT: Before using this tool, Claude MUST first think deeply and establish a deep understanding of the topic and question by thinking through all relevant details, context, constraints, and implications. Share these extended thoughts and ideas in the prompt so the model has comprehensive information to work with for the best analysis.",
                 },
                 "model": self.get_model_field_schema(),
                 "problem_context": {
                     "type": "string",
-                    "description": "Additional context about the problem or goal",
+                    "description": "Additional context about the problem or goal. Be as expressive as possible.",
                 },
                 "focus_areas": {
                     "type": "array",
@@ -121,20 +124,6 @@ class ThinkDeepTool(BaseTool):
     def get_request_model(self):
         return ThinkDeepRequest
 
-    async def execute(self, arguments: dict[str, Any]) -> list[TextContent]:
-        """Override execute to check current_analysis size before processing"""
-        # First validate request
-        request_model = self.get_request_model()
-        request = request_model(**arguments)
-
-        # Check prompt size
-        size_check = self.check_prompt_size(request.prompt)
-        if size_check:
-            return [TextContent(type="text", text=ToolOutput(**size_check).model_dump_json())]
-
-        # Continue with normal execution
-        return await super().execute(arguments)
-
     async def prepare_prompt(self, request: ThinkDeepRequest) -> str:
         """Prepare the full prompt for extended thinking"""
         # Check for prompt.txt in files
@@ -142,6 +131,13 @@ class ThinkDeepTool(BaseTool):
 
         # Use prompt.txt content if available, otherwise use the prompt field
         current_analysis = prompt_content if prompt_content else request.prompt
+
+        # Check user input size at MCP transport boundary (before adding internal content)
+        size_check = self.check_prompt_size(current_analysis)
+        if size_check:
+            from tools.models import ToolOutput
+
+            raise ValueError(f"MCP_SIZE_CHECK:{ToolOutput(**size_check).model_dump_json()}")
 
         # Update request files list
         if updated_files is not None:
@@ -157,7 +153,10 @@ class ThinkDeepTool(BaseTool):
         if request.files:
             # Use centralized file processing logic
             continuation_id = getattr(request, "continuation_id", None)
-            file_content = self._prepare_file_content_for_prompt(request.files, continuation_id, "Reference files")
+            file_content, processed_files = self._prepare_file_content_for_prompt(
+                request.files, continuation_id, "Reference files"
+            )
+            self._actually_processed_files = processed_files
 
             if file_content:
                 context_parts.append(f"\n=== REFERENCE FILES ===\n{file_content}\n=== END FILES ===")

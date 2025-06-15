@@ -17,7 +17,6 @@ import logging
 import os
 from typing import Any, Optional
 
-from mcp.types import TextContent
 from pydantic import Field
 
 from config import TEMPERATURE_ANALYTICAL
@@ -25,7 +24,6 @@ from systemprompts import TESTGEN_PROMPT
 from utils.file_utils import translate_file_paths
 
 from .base import BaseTool, ToolRequest
-from .models import ToolOutput
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +132,8 @@ class TestGenTool(BaseTool):
     def get_default_temperature(self) -> float:
         return TEMPERATURE_ANALYTICAL
 
+    # Line numbers are enabled by default from base class for precise targeting
+
     def get_model_category(self):
         """TestGen requires extended reasoning for comprehensive test analysis"""
         from tools.models import ToolModelCategory
@@ -142,21 +142,6 @@ class TestGenTool(BaseTool):
 
     def get_request_model(self):
         return TestGenRequest
-
-    async def execute(self, arguments: dict[str, Any]) -> list[TextContent]:
-        """Override execute to check prompt size before processing"""
-        # First validate request
-        request_model = self.get_request_model()
-        request = request_model(**arguments)
-
-        # Check prompt size if provided
-        if request.prompt:
-            size_check = self.check_prompt_size(request.prompt)
-            if size_check:
-                return [TextContent(type="text", text=ToolOutput(**size_check).model_dump_json())]
-
-        # Continue with normal execution
-        return await super().execute(arguments)
 
     def _process_test_examples(
         self, test_examples: list[str], continuation_id: Optional[str], available_tokens: int = None
@@ -229,13 +214,14 @@ class TestGenTool(BaseTool):
         # Use standard file content preparation with dynamic token budget
         try:
             logger.debug(f"[TESTGEN] Preparing file content for {len(examples_to_process)} test examples")
-            content = self._prepare_file_content_for_prompt(
+            content, processed_files = self._prepare_file_content_for_prompt(
                 examples_to_process,
                 continuation_id,
                 "Test examples",
                 max_tokens=test_examples_budget,
                 reserve_tokens=1000,
             )
+            # Store processed files for tracking - test examples are tracked separately from main code files
 
             # Determine how many files were actually included
             if content:
@@ -291,6 +277,14 @@ class TestGenTool(BaseTool):
         if updated_files is not None:
             logger.debug(f"[TESTGEN] Updated files list after prompt.txt processing: {len(updated_files)} files")
             request.files = updated_files
+
+        # Check user input size at MCP transport boundary (before adding internal content)
+        user_content = request.prompt
+        size_check = self.check_prompt_size(user_content)
+        if size_check:
+            from tools.models import ToolOutput
+
+            raise ValueError(f"MCP_SIZE_CHECK:{ToolOutput(**size_check).model_dump_json()}")
 
         # Calculate available token budget for dynamic allocation
         continuation_id = getattr(request, "continuation_id", None)
@@ -365,9 +359,10 @@ class TestGenTool(BaseTool):
 
         # Use centralized file processing logic for main code files (after deduplication)
         logger.debug(f"[TESTGEN] Preparing {len(code_files_to_process)} code files for analysis")
-        code_content = self._prepare_file_content_for_prompt(
+        code_content, processed_files = self._prepare_file_content_for_prompt(
             code_files_to_process, continuation_id, "Code to test", max_tokens=remaining_tokens, reserve_tokens=2000
         )
+        self._actually_processed_files = processed_files
 
         if code_content:
             from utils.token_utils import estimate_tokens
@@ -439,20 +434,18 @@ class TestGenTool(BaseTool):
 
 ---
 
-# IMMEDIATE NEXT ACTION
-
 Claude, you are now in EXECUTION MODE. Take immediate action:
 
-## Step 1: ULTRATHINK & CREATE TESTS
-ULTRATHINK while creating these tests. Verify EVERY code reference, import, function name, and logic path is
+## Step 1: THINK & CREATE TESTS
+ULTRATHINK while creating these in order to verify that every code reference, import, function name, and logic path is
 100% accurate before saving.
 
-- **CREATE** all test files in the correct project structure
-- **SAVE** each test with proper naming conventions
-- **VALIDATE** all imports, references, and dependencies are correct as required by the current framework
+- CREATE all test files in the correct project structure
+- SAVE each test using proper naming conventions
+- VALIDATE all imports, references, and dependencies are correct as required by the current framework / project / file
 
 ## Step 2: DISPLAY RESULTS TO USER
-After creating each test file, show the user:
+After creating each test file, MUST show the user:
 ```
 ✅ Created: path/to/test_file.py
    - test_function_name(): Brief description of what it tests
@@ -461,11 +454,11 @@ After creating each test file, show the user:
 ```
 
 ## Step 3: VALIDATE BY EXECUTION
-**MANDATORY**: Run the tests immediately to confirm they work:
-- Install any missing dependencies first
+CRITICAL: Run the tests immediately to confirm they work:
+- Install any missing dependencies first or request user to perform step if this cannot be automated
 - Execute the test suite
 - Fix any failures or errors
-- Confirm 100% pass rate
+- Confirm 100% pass rate. If there's a failure, re-iterate, go over each test, validate and understand why it's failing
 
 ## Step 4: INTEGRATION VERIFICATION
 - Verify tests integrate with existing test infrastructure
@@ -475,6 +468,6 @@ After creating each test file, show the user:
 ## Step 5: MOVE TO NEXT ACTION
 Once tests are confirmed working, immediately proceed to the next logical step for the project.
 
-**CRITICAL**: Do NOT stop after generating - you MUST create, validate, run, and confirm the tests work. Take full
-ownership of the testing implementation and move to your next work. If you were supplied a more_work_required request
-in the response above, you MUST honor it."""
+MANDATORY: Do NOT stop after generating - you MUST create, validate, run, and confirm the tests work and all of the
+steps listed above are carried out correctly. Take full ownership of the testing implementation and move to your
+next work. If you were supplied a more_work_required request in the response above, you MUST honor it."""

@@ -3,16 +3,12 @@ services:
     image: redis:7-alpine
     container_name: zen-mcp-redis
     restart: unless-stopped
+    stop_grace_period: 3s
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     command: redis-server --save 60 1 --loglevel warning --maxmemory 64mb --maxmemory-policy allkeys-lru
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
     deploy:
       resources:
         limits:
@@ -25,12 +21,13 @@ services:
     image: zen-mcp-server:latest
     container_name: zen-mcp-server
     restart: unless-stopped
+    stop_grace_period: 5s
     depends_on:
-      redis:
-        condition: service_healthy
+      - redis
     environment:
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - XAI_API_KEY=${XAI_API_KEY:-}
       # OpenRouter support
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - CUSTOM_MODELS_CONFIG_PATH=${CUSTOM_MODELS_CONFIG_PATH:-}
@@ -45,6 +42,7 @@ services:
       # Model usage restrictions
       - OPENAI_ALLOWED_MODELS=${OPENAI_ALLOWED_MODELS:-}
       - GOOGLE_ALLOWED_MODELS=${GOOGLE_ALLOWED_MODELS:-}
+      - XAI_ALLOWED_MODELS=${XAI_ALLOWED_MODELS:-}
       - REDIS_URL=redis://redis:6379/0
       # Use HOME not PWD: Claude needs access to any absolute file path, not just current project,
       # and Claude Code could be running from multiple locations at the same time
@@ -67,6 +65,7 @@ services:
     image: zen-mcp-server:latest
     container_name: zen-mcp-log-monitor
     restart: unless-stopped
+    stop_grace_period: 3s
     depends_on:
       - zen-mcp
     environment:

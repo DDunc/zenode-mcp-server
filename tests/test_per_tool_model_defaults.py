@@ -202,9 +202,9 @@ class TestCustomProviderFallback:
     @patch.object(ModelProviderRegistry, "_find_extended_thinking_model")
     def test_extended_reasoning_custom_fallback(self, mock_find_thinking):
         """Test EXTENDED_REASONING falls back to custom thinking model."""
-        with patch.object(ModelProviderRegistry, "get_provider") as mock_get_provider:
-            # No native providers available
-            mock_get_provider.return_value = None
+        with patch.object(ModelProviderRegistry, "get_available_models") as mock_get_available:
+            # No native models available, but OpenRouter is available
+            mock_get_available.return_value = {"openrouter-model": ProviderType.OPENROUTER}
             mock_find_thinking.return_value = "custom/thinking-model"
 
             model = ModelProviderRegistry.get_preferred_fallback_model(ToolModelCategory.EXTENDED_REASONING)
@@ -292,7 +292,7 @@ class TestFileContentPreparation:
             tool._current_model_name = "auto"
 
             # Call the method
-            tool._prepare_file_content_for_prompt(["/test/file.py"], None, "test")
+            content, processed_files = tool._prepare_file_content_for_prompt(["/test/file.py"], None, "test")
 
             # Check that it logged the correct message
             debug_calls = [call for call in mock_logger.debug.call_args_list if "Auto mode detected" in str(call)]

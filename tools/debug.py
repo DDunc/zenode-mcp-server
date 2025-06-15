@@ -4,7 +4,6 @@ Debug Issue tool - Root cause analysis and debugging assistance
 
 from typing import TYPE_CHECKING, Any, Optional
 
-from mcp.types import TextContent
 from pydantic import Field
 
 if TYPE_CHECKING:
@@ -14,7 +13,6 @@ from config import TEMPERATURE_ANALYTICAL
 from systemprompts import DEBUG_ISSUE_PROMPT
 
 from .base import BaseTool, ToolRequest
-from .models import ToolOutput
 
 
 class DebugIssueRequest(ToolRequest):
@@ -111,6 +109,8 @@ class DebugIssueTool(BaseTool):
     def get_default_temperature(self) -> float:
         return TEMPERATURE_ANALYTICAL
 
+    # Line numbers are enabled by default from base class for precise error location
+
     def get_model_category(self) -> "ToolModelCategory":
         """Debug requires deep analysis and reasoning"""
         from tools.models import ToolModelCategory
@@ -119,26 +119,6 @@ class DebugIssueTool(BaseTool):
 
     def get_request_model(self):
         return DebugIssueRequest
-
-    async def execute(self, arguments: dict[str, Any]) -> list[TextContent]:
-        """Override execute to check error_description and error_context size before processing"""
-        # First validate request
-        request_model = self.get_request_model()
-        request = request_model(**arguments)
-
-        # Check prompt size
-        size_check = self.check_prompt_size(request.prompt)
-        if size_check:
-            return [TextContent(type="text", text=ToolOutput(**size_check).model_dump_json())]
-
-        # Check error_context size if provided
-        if request.error_context:
-            size_check = self.check_prompt_size(request.error_context)
-            if size_check:
-                return [TextContent(type="text", text=ToolOutput(**size_check).model_dump_json())]
-
-        # Continue with normal execution
-        return await super().execute(arguments)
 
     async def prepare_prompt(self, request: DebugIssueRequest) -> str:
         """Prepare the debugging prompt"""
@@ -151,6 +131,20 @@ class DebugIssueTool(BaseTool):
                 request.prompt = prompt_content
             else:
                 request.error_context = prompt_content
+
+        # Check user input sizes at MCP transport boundary (before adding internal content)
+        size_check = self.check_prompt_size(request.prompt)
+        if size_check:
+            from tools.models import ToolOutput
+
+            raise ValueError(f"MCP_SIZE_CHECK:{ToolOutput(**size_check).model_dump_json()}")
+
+        if request.error_context:
+            size_check = self.check_prompt_size(request.error_context)
+            if size_check:
+                from tools.models import ToolOutput
+
+                raise ValueError(f"MCP_SIZE_CHECK:{ToolOutput(**size_check).model_dump_json()}")
 
         # Update request files list
         if updated_files is not None:
@@ -172,7 +166,10 @@ class DebugIssueTool(BaseTool):
         if request.files:
             # Use centralized file processing logic
             continuation_id = getattr(request, "continuation_id", None)
-            file_content = self._prepare_file_content_for_prompt(request.files, continuation_id, "Code")
+            file_content, processed_files = self._prepare_file_content_for_prompt(
+                request.files, continuation_id, "Code"
+            )
+            self._actually_processed_files = processed_files
 
             if file_content:
                 context_parts.append(f"\n=== RELEVANT CODE ===\n{file_content}\n=== END CODE ===")

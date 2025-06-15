@@ -47,7 +47,13 @@
       "Bash(npm install:*)",
       "Bash(ollama:*)",
       "Bash(./scripts/setup-local-ai.sh:*)",
-      "Bash(git remote set-url:*)"
+      "Bash(git remote set-url:*)",
+      "Bash(git add:*)",
+      "mcp__zenode__gopher",
+      "Bash(git rebase:*)",
+      "Bash(EDITOR='sed -i \"s/update many things/update readme, gopherize all the things/\"' git rebase -i 685dda0^)",
+      "Bash(git commit:*)",
+      "Bash(git filter-branch:*)"
     ],
     "deny": []
   }
