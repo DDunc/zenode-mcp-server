@@ -78,6 +78,7 @@ export interface BaseTool {
   modelCategory: ToolModelCategory;
   
   getInputSchema(): any;
+  getZodSchema(): z.ZodSchema;
   getSystemPrompt(): string;
   execute(args: ToolRequest): Promise<ToolOutput>;
 }

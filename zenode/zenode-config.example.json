@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "logging": {
+    "conversationTrigger": ">>",
+    "enabled": true,
+    "logPath": ".zenode/conversation-logs",
+    "includeFullData": true
+  },
+  "shortcuts": {
+    "coordinationPrefix": ">>",
+    "toolInvocation": "zenode:"
+  },
+  "server": {
+    "requestTimeout": 30000,
+    "maxConcurrentRequests": 10
+  }
+}

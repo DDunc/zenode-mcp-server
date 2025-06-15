@@ -34,6 +34,8 @@ import { logger, mcpActivityLogger } from './utils/logger.js';
 import { modelProviderRegistry } from './providers/registry.js';
 import { BaseTool, ToolOutput } from './types/tools.js';
 import { reconstructThreadContext } from './utils/conversation-memory.js';
+import { DefaultMiddlewarePipeline, ConversationLoggerMiddleware, ToolContext } from './middleware/index.js';
+import { configLoader } from './config/loader.js';
 
 // Tool imports
 import { ChatTool } from './tools/chat.js';
@@ -70,6 +72,16 @@ const TOOLS: Record<string, BaseTool> = {
   precommit: new PrecommitTool(),
   testgen: new TestGenTool(),
 };
+
+// Initialize middleware pipeline
+const middlewarePipeline = new DefaultMiddlewarePipeline();
+
+// Register conversation logger middleware
+const conversationLogger = new ConversationLoggerMiddleware({
+  logPath: '.zenode/conversation-logs',
+  enabled: true
+});
+middlewarePipeline.register(conversationLogger);
 
 /**
  * Configure and validate AI providers based on available API keys.
@@ -221,6 +233,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
  * Thread Context Reconstruction:
  * If the request contains a continuation_id, this function reconstructs
  * the conversation history and injects it into the tool's context.
+ * 
+ * Middleware Integration:
+ * All tool calls are processed through the middleware pipeline for logging,
+ * monitoring, and other cross-cutting concerns.
  */
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
@@ -229,6 +245,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   // Log to activity file for monitoring
   mcpActivityLogger.info(`TOOL_CALL: ${name} with ${Object.keys(args || {}).length} arguments`);
+
+  // Create middleware context for this request
+  const context: ToolContext = {
+    toolName: name,
+    requestId: `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    timestamp: new Date(),
+    input: args,
+    conversationId: args?.continuation_id as string | undefined,
+  };
+
+  // Execute request middleware
+  await middlewarePipeline.executeRequest(context);
 
   try {
     // Handle thread context reconstruction if continuation_id is present
@@ -241,6 +269,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       processedArgs = await reconstructThreadContext(processedArgs);
     }
 
+    let result: any;
+
     // Route to AI-powered tools that require AI API calls
     if (name in TOOLS) {
       logger.info(`Executing tool '${name}' with ${Object.keys(processedArgs).length} parameter(s)`);
@@ -248,21 +278,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (!tool) {
         throw new McpError(ErrorCode.MethodNotFound, `Tool ${name} not found`);
       }
-      const result = await tool.execute(processedArgs);
+      result = await tool.execute(processedArgs);
       logger.info(`Tool '${name}' execution completed`);
-      
-      return formatToolResponse(result);
     }
-
     // Handle version tool
-    if (name === 'version') {
-      return formatVersionResponse();
+    else if (name === 'version') {
+      result = formatVersionResponse();
+    }
+    // Unknown tool
+    else {
+      throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
 
-    // Unknown tool
-    throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
+    // Execute response middleware with successful result
+    await middlewarePipeline.executeResponse(context, result);
+    
+    return name === 'version' ? result : formatToolResponse(result);
   } catch (error) {
     logger.error(`Tool execution error for '${name}':`, error);
+    
+    // Execute response middleware with error
+    await middlewarePipeline.executeResponse(context, null, error as Error);
     
     if (error instanceof McpError) {
       throw error;
@@ -347,6 +383,17 @@ async function main() {
   logger.info(`Node.js: ${process.version}`);
 
   try {
+    // Load configuration first
+    const config = await configLoader.loadConfig();
+    const validation = configLoader.validateConfig(config);
+    
+    if (!validation.valid) {
+      logger.error('Configuration validation failed:', validation.errors);
+      throw new Error(`Invalid configuration: ${validation.errors.join(', ')}`);
+    }
+    
+    logger.info(`Configuration loaded - Trigger pattern: "${config.logging.conversationTrigger}"`);
+    logger.info(`Logging enabled: ${config.logging.enabled}, Path: ${config.logging.logPath}`);
     // Validate API configuration
     if (!hasAnyApiConfigured()) {
       throw new Error(

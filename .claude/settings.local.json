@@ -36,7 +36,14 @@
       "mcp__zenode__testgen",
       "Bash(npm test)",
       "mcp__zenode__analyze",
-      "Bash(npm run type-check:*)"
+      "Bash(npm run type-check:*)",
+      "WebFetch(domain:modelcontextprotocol.io)",
+      "WebFetch(domain:github.com)",
+      "Bash(npm run lint)",
+      "Bash(true)",
+      "Bash(node:*)",
+      "Bash(rg:*)",
+      "Bash(./get-logs.sh:*)"
     ],
     "deny": []
   }

@@ -40,6 +40,10 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/systemprompts ./systemprompts
 COPY --from=builder /app/conf ./conf
 
+# Copy configuration files if they exist
+COPY --from=builder /app/zenode-config.json* ./
+COPY --from=builder /app/zenode.config.* ./
+
 # Create non-root user
 RUN addgroup -g 1001 -S zenode && \
     adduser -S zenode -u 1001 -G zenode && \

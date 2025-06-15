@@ -75,6 +75,10 @@ const MAX_TOKENS_PER_FILE = 10000;
 
 export class PrecommitTool extends BaseTool {
   name = 'precommit';
+
+  getZodSchema(): z.ZodSchema {
+    return PrecommitRequestSchema;
+  }
   
   description = 
     'PRECOMMIT VALIDATION FOR GIT CHANGES - ALWAYS use this tool before creating any git commit! ' +

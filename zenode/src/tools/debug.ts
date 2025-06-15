@@ -46,6 +46,10 @@ const DebugRequestSchema = z.object({
 
 export class DebugTool extends BaseTool {
   name = 'debug';
+
+  getZodSchema(): z.ZodSchema {
+    return DebugRequestSchema;
+  }
   
   description = 
     'DEBUG & ROOT CAUSE ANALYSIS - Expert debugging for complex issues with 1M token capacity. ' +
@@ -260,18 +264,28 @@ export class DebugTool extends BaseTool {
       );
     }
     
-    // Add relevant files if provided
+    // Auto-detect files mentioned in the prompt and error context
+    const allText = [request.prompt, request.error_context, request.runtime_info, request.previous_attempts]
+      .filter(Boolean)
+      .join('\n');
+    const autoDetectedFiles = await this.autoReadFilesFromPrompt(allText);
+    
+    // Combine explicitly provided files with auto-detected ones
+    const allFiles = { ...autoDetectedFiles };
     if (request.files && request.files.length > 0) {
-      const fileContents = await this.readFilesSecurely(request.files);
-      const formattedFiles = Object.entries(fileContents)
+      const explicitFiles = await this.readFilesSecurely(request.files);
+      Object.assign(allFiles, explicitFiles);
+    }
+    
+    // Add relevant files if we have any
+    if (Object.keys(allFiles).length > 0) {
+      const formattedFiles = Object.entries(allFiles)
         .map(([path, content]) => `=== FILE: ${path} ===\n${content}\n=== END FILE ===`)
         .join('\n\n');
       
-      if (formattedFiles) {
-        contextParts.push(
-          `\n=== RELEVANT CODE ===\n${formattedFiles}\n=== END CODE ===`
-        );
-      }
+      contextParts.push(
+        `\n=== RELEVANT CODE ===\n${formattedFiles}\n=== END CODE ===`
+      );
     }
     
     const fullContext = contextParts.join('\n');

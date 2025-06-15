@@ -110,23 +110,99 @@ export class OpenRouterProvider extends BaseModelProvider {
    * Add default models if config loading fails
    */
   private addDefaultModels(): void {
-    // Claude models
-    this.modelCapabilities.set('anthropic/claude-3-opus', {
+    // Claude Sonnet models (preferred default)
+    this.modelCapabilities.set('anthropic/claude-3-sonnet', {
       provider: this.type,
-      modelName: 'anthropic/claude-3-opus',
-      friendlyName: 'Claude 3 Opus (via OpenRouter)',
+      modelName: 'anthropic/claude-3-sonnet',
+      friendlyName: 'Claude 3 Sonnet (via OpenRouter)',
       contextWindow: 200000,
       supportsExtendedThinking: false,
       supportsSystemPrompts: true,
       supportsStreaming: false,
-      supportsFunctionCalling: false,
+      supportsFunctionCalling: true,
       supportsJsonMode: false,
       temperatureConstraint: new RangeTemperatureConstraint(0, 1, 0.7),
     });
 
-    this.modelAliases.set('opus', 'anthropic/claude-3-opus');
+    this.modelCapabilities.set('anthropic/claude-3.5-sonnet', {
+      provider: this.type,
+      modelName: 'anthropic/claude-3.5-sonnet',
+      friendlyName: 'Claude 3.5 Sonnet (via OpenRouter)',
+      contextWindow: 200000,
+      supportsExtendedThinking: false,
+      supportsSystemPrompts: true,
+      supportsStreaming: false,
+      supportsFunctionCalling: true,
+      supportsJsonMode: false,
+      temperatureConstraint: new RangeTemperatureConstraint(0, 1, 0.7),
+    });
 
-    // Add more default models as needed
+    // Claude Haiku (fast model)
+    this.modelCapabilities.set('anthropic/claude-3-haiku', {
+      provider: this.type,
+      modelName: 'anthropic/claude-3-haiku',
+      friendlyName: 'Claude 3 Haiku (via OpenRouter)',
+      contextWindow: 200000,
+      supportsExtendedThinking: false,
+      supportsSystemPrompts: true,
+      supportsStreaming: false,
+      supportsFunctionCalling: true,
+      supportsJsonMode: false,
+      temperatureConstraint: new RangeTemperatureConstraint(0, 1, 0.7),
+    });
+
+    // Add aliases for easier access
+    this.modelAliases.set('sonnet', 'anthropic/claude-3.5-sonnet');
+    this.modelAliases.set('haiku', 'anthropic/claude-3-haiku');
+    
+    // Add Opus only if explicitly enabled via config
+    const enableOpus = process.env.ENABLE_CLAUDE_OPUS === 'true';
+    if (enableOpus) {
+      this.modelCapabilities.set('anthropic/claude-3-opus', {
+        provider: this.type,
+        modelName: 'anthropic/claude-3-opus',
+        friendlyName: 'Claude 3 Opus (via OpenRouter)',
+        contextWindow: 200000,
+        supportsExtendedThinking: false,
+        supportsSystemPrompts: true,
+        supportsStreaming: false,
+        supportsFunctionCalling: true,
+        supportsJsonMode: false,
+        temperatureConstraint: new RangeTemperatureConstraint(0, 1, 0.7),
+      });
+      this.modelAliases.set('opus', 'anthropic/claude-3-opus');
+    }
+
+    // Add Gemini models via OpenRouter
+    this.modelCapabilities.set('google/gemini-2.5-flash-preview-05-20', {
+      provider: this.type,
+      modelName: 'google/gemini-2.5-flash-preview-05-20',
+      friendlyName: 'Gemini 2.5 Flash (via OpenRouter)',
+      contextWindow: 1000000,
+      supportsExtendedThinking: false,
+      supportsSystemPrompts: true,
+      supportsStreaming: false,
+      supportsFunctionCalling: true,
+      supportsJsonMode: true,
+      temperatureConstraint: new RangeTemperatureConstraint(0, 2, 0.7),
+    });
+
+    this.modelCapabilities.set('google/gemini-2.5-pro-preview-06-05', {
+      provider: this.type,
+      modelName: 'google/gemini-2.5-pro-preview-06-05',
+      friendlyName: 'Gemini 2.5 Pro (via OpenRouter)',
+      contextWindow: 1000000,
+      supportsExtendedThinking: true,
+      supportsSystemPrompts: true,
+      supportsStreaming: false,
+      supportsFunctionCalling: true,
+      supportsJsonMode: true,
+      temperatureConstraint: new RangeTemperatureConstraint(0, 2, 0.7),
+    });
+
+    // Add Gemini aliases
+    this.modelAliases.set('flash', 'google/gemini-2.5-flash-preview-05-20');
+    this.modelAliases.set('pro', 'google/gemini-2.5-pro-preview-06-05');
   }
 
   /**

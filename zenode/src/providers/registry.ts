@@ -192,6 +192,13 @@ export class ModelProviderRegistry {
    * Get provider for a specific model
    */
   async getProviderForModel(modelName: string): Promise<ModelProvider | null> {
+    // Handle auto mode specially - this shouldn't happen but provides better error handling
+    if (modelName.toLowerCase() === 'auto') {
+      logger.warn('Received "auto" as model name - this indicates a bug in model selection flow');
+      logger.warn('Auto mode should be handled at the tool level, not passed as a model name');
+      return null;
+    }
+
     // Check model restrictions first
     if (!this.isModelAllowed(modelName)) {
       logger.warn(`Model ${modelName} is not allowed by restrictions`);
@@ -342,17 +349,25 @@ export class ModelProviderRegistry {
     }
 
     if (OPENROUTER_API_KEY && OPENROUTER_API_KEY !== 'your_openrouter_api_key_here') {
-      // Add some default OpenRouter models for auto mode validation
+      // Add default OpenRouter models for auto mode validation (prioritize Claude Sonnet)
       const openrouterModels = [
-        'google/gemini-2.5-flash-preview-05-20',
-        'google/gemini-2.5-pro-preview',
+        'anthropic/claude-3.5-sonnet',
+        'anthropic/claude-3-sonnet', 
         'anthropic/claude-3-haiku',
-        'anthropic/claude-3-opus',
-        'anthropic/claude-3-sonnet',
-        'openai/o3',
-        'openai/o3-mini',
-        'openai/o4-mini',
+        'google/gemini-2.5-flash-preview-05-20',
+        'google/gemini-2.5-pro-preview-06-05',
+        'flash',
+        'pro',
+        'sonnet',
+        'haiku',
       ];
+      
+      // Add Opus only if explicitly enabled
+      const enableOpus = process.env.ENABLE_CLAUDE_OPUS === 'true';
+      if (enableOpus) {
+        openrouterModels.push('anthropic/claude-3-opus', 'opus');
+      }
+      
       models.push(...openrouterModels.filter((m) => this.isModelAllowed(m)));
     }
 

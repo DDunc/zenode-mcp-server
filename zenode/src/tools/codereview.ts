@@ -62,6 +62,10 @@ export class CodeReviewTool extends BaseTool {
   
   defaultTemperature = TEMPERATURE_ANALYTICAL;
   modelCategory = ToolModelCategory.REASONING;
+
+  getZodSchema(): z.ZodSchema {
+    return CodeReviewRequestSchema;
+  }
   
   getInputSchema(): any {
     const schema = {

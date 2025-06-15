@@ -46,6 +46,10 @@ const ThinkDeepRequestSchema = z.object({
 
 export class ThinkDeepTool extends BaseTool {
   name = 'thinkdeep';
+
+  getZodSchema(): z.ZodSchema {
+    return ThinkDeepRequestSchema;
+  }
   
   description = 
     'EXTENDED THINKING & REASONING - Deep thinking partner for complex problems. ' +

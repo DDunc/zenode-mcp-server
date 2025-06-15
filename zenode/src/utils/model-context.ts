@@ -71,7 +71,7 @@ export class ModelContext {
   async getCapabilities(): Promise<ModelCapabilities> {
     if (!this._capabilities) {
       const provider = await this.getProvider();
-      this._capabilities = await provider.getCapabilities(this.modelName);
+      this._capabilities = provider.getModelCapabilities(this.modelName);
       if (!this._capabilities) {
         throw new Error(`No capabilities found for model: ${this.modelName}`);
       }
@@ -163,6 +163,16 @@ export class ModelContext {
    */
   static fromArguments(args: Record<string, any>): ModelContext {
     const modelName = args.model || DEFAULT_MODEL;
+    
+    // Handle auto mode - use fallback model for context calculations
+    if (modelName.toLowerCase() === 'auto') {
+      logger.warn('Creating ModelContext with auto mode - using fallback model for context calculations');
+      // Use a reasonable fallback model for token calculations
+      // This won't be used for actual generation, just for context size estimation
+      const fallbackModel = 'anthropic/claude-3-sonnet';
+      return new ModelContext(fallbackModel);
+    }
+    
     return new ModelContext(modelName);
   }
 

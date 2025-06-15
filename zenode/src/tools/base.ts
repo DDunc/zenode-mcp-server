@@ -21,6 +21,7 @@ import {
   ToolModelCategory,
   ContinuationOffer,
 } from '../types/tools.js';
+import { zodToJsonSchema, validateToolArgs } from '../utils/schema-helpers.js';
 import { ModelProvider, ModelRequest, Message } from '../types/providers.js';
 import { modelProviderRegistry } from '../providers/registry.js';
 import { 
@@ -58,9 +59,16 @@ export abstract class BaseTool {
   abstract modelCategory: ToolModelCategory;
 
   /**
-   * Get the JSON Schema for this tool's input
+   * Get the Zod schema for this tool's input validation
    */
-  abstract getInputSchema(): any;
+  abstract getZodSchema(): z.ZodSchema;
+
+  /**
+   * Get the JSON Schema for this tool's input (for MCP protocol)
+   */
+  getInputSchema(): any {
+    return zodToJsonSchema(this.getZodSchema());
+  }
 
   /**
    * Get the system prompt for this tool
@@ -73,12 +81,24 @@ export abstract class BaseTool {
   abstract execute(args: ToolRequest): Promise<ToolOutput>;
 
   /**
+   * Validate and parse tool arguments
+   */
+  protected validateArgs<T>(args: any): T {
+    return validateToolArgs(this.getZodSchema(), args);
+  }
+
+  /**
    * Select the best model for this request
    */
   protected async selectModel(
     requestedModel: string | undefined,
     provider?: ModelProvider,
   ): Promise<string> {
+    // Handle explicit "auto" model request
+    if (requestedModel === 'auto') {
+      return this.selectBestModel();
+    }
+
     // If a specific model is requested, validate and use it
     if (requestedModel && !IS_AUTO_MODE) {
       const capabilities = await modelProviderRegistry.getModelCapabilities(requestedModel);
@@ -129,8 +149,25 @@ export abstract class BaseTool {
         break;
     }
 
-    // Fallback to first available model
-    return availableModels[0] || 'gemini-2.5-flash-preview-05-20';
+    // Fallback hierarchy - try Claude Sonnet variants first, then others
+    const fallbackModels = [
+      'anthropic/claude-3-sonnet',
+      'anthropic/claude-3.5-sonnet',
+      'anthropic/claude-3-haiku',
+      'pro',
+      'gemini-2.5-pro-preview-06-05',
+      'flash',
+      'gemini-2.5-flash-preview-05-20',
+      'o3',
+      'o4-mini'
+    ];
+    
+    for (const model of fallbackModels) {
+      if (availableModels.includes(model)) return model;
+    }
+
+    // Final fallback to first available model
+    return availableModels[0] || 'anthropic/claude-3-sonnet';
   }
 
   /**
@@ -317,6 +354,57 @@ export abstract class BaseTool {
     }
     
     return fileContents;
+  }
+
+  /**
+   * Auto-detect and read files mentioned in the prompt
+   */
+  protected async autoReadFilesFromPrompt(prompt: string): Promise<Record<string, string>> {
+    // Extract file paths from prompt using various patterns
+    const filePathPatterns = [
+      // Absolute paths: /path/to/file.ext
+      /\/[\w\-\.\/]+\.[\w]+/g,
+      // Relative paths: ./path/to/file.ext or ../path/to/file.ext
+      /\.\.?\/[\w\-\.\/]+\.[\w]+/g,
+      // Files mentioned in quotes: "src/file.ts" or 'components/Button.jsx'
+      /["']([\w\-\.\/]+\.[\w]+)["']/g,
+      // Files mentioned with backticks: `src/file.ts`
+      /`([\w\-\.\/]+\.[\w]+)`/g,
+    ];
+
+    const detectedFiles = new Set<string>();
+    
+    for (const pattern of filePathPatterns) {
+      const matches = prompt.matchAll(pattern);
+      for (const match of matches) {
+        const filePath = match[1] || match[0]; // Use capture group if available, otherwise full match
+        // Only include common code file extensions
+        if (this.isLikelyCodeFile(filePath)) {
+          detectedFiles.add(filePath.trim());
+        }
+      }
+    }
+
+    if (detectedFiles.size > 0) {
+      logger.info(`Auto-detected ${detectedFiles.size} files in prompt: ${Array.from(detectedFiles).join(', ')}`);
+      return await this.readFilesSecurely(Array.from(detectedFiles));
+    }
+
+    return {};
+  }
+
+  /**
+   * Check if a file path looks like a code file we should auto-read
+   */
+  private isLikelyCodeFile(filePath: string): boolean {
+    const codeExtensions = [
+      '.ts', '.js', '.tsx', '.jsx', '.json', '.md', '.txt', '.yaml', '.yml',
+      '.css', '.scss', '.html', '.xml', '.py', '.java', '.go', '.rs', '.rb',
+      '.php', '.swift', '.kt', '.scala', '.sql', '.sh', '.bash', '.env'
+    ];
+    
+    const ext = filePath.toLowerCase().split('.').pop();
+    return ext ? codeExtensions.includes(`.${ext}`) : false;
   }
 
   /**

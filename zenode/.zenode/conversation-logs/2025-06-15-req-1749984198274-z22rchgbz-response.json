@@ -1,0 +1,38 @@
+{
+  "timestamp": "2025-06-15T10:43:21.591Z",
+  "requestId": "req-1749984198274-z22rchgbz",
+  "toolName": "debug",
+  "phase": "response",
+  "data": {
+    "output": {
+      "status": "success",
+      "content": "{\"status\": \"clarification_required\", \"question\": \"To better analyze the issue, I would need access to the relevant code files mentioned. Could you please provide the contents of index.ts, base.ts, and chat.ts?\", \"files_needed\": [\"/Users/edunc/Documents/gitz/zen-mcp-server/zenode/src/index.ts\", \"/Users/edunc/Documents/gitz/zen-mcp-server/zenode/src/tools/base.ts\", \"/Users/edunc/Documents/gitz/zen-mcp-server/zenode/src/tools/chat.ts\"]}",
+      "content_type": "text",
+      "metadata": {
+        "model_used": "anthropic/claude-3-sonnet",
+        "token_usage": {
+          "inputTokens": 1315,
+          "outputTokens": 146,
+          "totalTokens": 1461
+        }
+      },
+      "continuation_offer": {
+        "thread_id": "mbxjeru9-xhcbd3",
+        "suggestions": [
+          "Try suggested solutions",
+          "Investigate related errors",
+          "Examine system state"
+        ],
+        "stats": {
+          "total_turns": 2,
+          "total_input_tokens": 1315,
+          "total_output_tokens": 146,
+          "models_used": [
+            "anthropic/claude-3-sonnet"
+          ]
+        }
+      }
+    },
+    "duration": 3317
+  }
+}

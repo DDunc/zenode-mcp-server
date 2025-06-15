@@ -62,6 +62,10 @@ const MAX_TEST_FILE_SIZE = 50000; // bytes
 
 export class TestGenTool extends BaseTool {
   name = 'testgen';
+
+  getZodSchema(): z.ZodSchema {
+    return TestGenRequestSchema;
+  }
   
   description = 
     'COMPREHENSIVE TEST GENERATION - Creates thorough test suites with edge case coverage. ' +

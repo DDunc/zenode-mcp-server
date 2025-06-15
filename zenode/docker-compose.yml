@@ -34,6 +34,7 @@ services:
     volumes:
       - ${MCP_WORKSPACE:-./workspace}:/workspace:ro
       - zenode-logs:/tmp
+      - ./.zenode:/app/.zenode:rw
     depends_on:
       redis:
         condition: service_healthy

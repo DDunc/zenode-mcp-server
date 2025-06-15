@@ -3,8 +3,9 @@
  */
 
 import { z } from 'zod';
-import { BaseTool, BaseRequestSchema } from './base.js';
+import { BaseTool } from './base.js';
 import { ToolOutput, ChatRequest } from '../types/tools.js';
+import { BaseToolRequestSchema } from '../utils/schema-helpers.js';
 import { modelProviderRegistry } from '../providers/registry.js';
 import { TEMPERATURE_BALANCED } from '../config.js';
 import { logger } from '../utils/logger.js';
@@ -12,7 +13,7 @@ import { logger } from '../utils/logger.js';
 /**
  * Chat tool request schema
  */
-const ChatRequestSchema = BaseRequestSchema.extend({
+const ChatRequestSchema = BaseToolRequestSchema.extend({
   prompt: z.string().describe('Your question, topic, or current thinking to discuss'),
   files: z.array(z.string()).optional().describe('Optional files for context (must be absolute paths)'),
 });
@@ -35,40 +36,8 @@ export class ChatTool extends BaseTool {
   defaultTemperature = TEMPERATURE_BALANCED;
   modelCategory = 'all' as const;
 
-  getInputSchema() {
-    return {
-      type: 'object',
-      properties: {
-        prompt: {
-          type: 'string',
-          description: 'Your question, topic, or current thinking to discuss',
-        },
-        files: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Optional files for context (must be absolute paths)',
-        },
-        model: {
-          type: 'string',
-          description: this.getModelDescription(),
-        },
-        temperature: {
-          type: 'number',
-          description: `Response creativity (0-1, default ${this.defaultTemperature})`,
-        },
-        use_websearch: {
-          type: 'boolean',
-          description: 'Enable web search for documentation, best practices, and current information',
-          default: true,
-        },
-        continuation_id: {
-          type: 'string',
-          description: 'Thread continuation ID for multi-turn conversations',
-        },
-      },
-      required: ['prompt'],
-      additionalProperties: false,
-    };
+  getZodSchema() {
+    return ChatRequestSchema;
   }
 
   getSystemPrompt(): string {
@@ -109,14 +78,23 @@ Remember: You're a thinking partner, not just an answer machine. Engage with the
         throw new Error(`No provider available for model: ${selectedModel}`);
       }
       
-      // Read files if provided
-      let fileContext = '';
+      // Auto-detect files mentioned in the prompt
+      const autoDetectedFiles = await this.autoReadFilesFromPrompt(validated.prompt);
+      
+      // Combine explicitly provided files with auto-detected ones
+      const allFiles = { ...autoDetectedFiles };
       if (validated.files && validated.files.length > 0) {
-        logger.info(`Reading ${validated.files.length} files for context`);
-        const fileContents = await this.readFilesSecurely(validated.files);
-        
+        logger.info(`Reading ${validated.files.length} explicitly provided files for context`);
+        const explicitFiles = await this.readFilesSecurely(validated.files);
+        Object.assign(allFiles, explicitFiles);
+      }
+      
+      // Build file context
+      let fileContext = '';
+      if (Object.keys(allFiles).length > 0) {
+        logger.info(`Including ${Object.keys(allFiles).length} files in context`);
         fileContext = '\n\nFile contents for reference:\n';
-        for (const [filePath, content] of Object.entries(fileContents)) {
+        for (const [filePath, content] of Object.entries(allFiles)) {
           fileContext += `\n--- ${filePath} ---\n${content}\n`;
         }
       }

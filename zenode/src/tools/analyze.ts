@@ -17,6 +17,7 @@ import {
   AnalysisTypeSchema,
   OutputFormatSchema,
 } from '../types/tools.js';
+import { BaseToolRequestSchema } from '../utils/schema-helpers.js';
 import { ANALYZE_PROMPT } from '../systemprompts/analyze-prompt.js';
 import { 
   TEMPERATURE_ANALYTICAL,
@@ -36,16 +37,11 @@ import { modelProviderRegistry } from '../providers/registry.js';
 /**
  * Request validation schema
  */
-const AnalyzeRequestSchema = z.object({
+const AnalyzeRequestSchema = BaseToolRequestSchema.extend({
   files: z.array(z.string()),
   prompt: z.string(),
-  model: z.string().optional(),
   analysis_type: AnalysisTypeSchema.optional(),
   output_format: OutputFormatSchema.default('detailed'),
-  temperature: z.number().min(0).max(1).optional(),
-  thinking_mode: ThinkingModeSchema.optional(),
-  use_websearch: z.boolean().default(true),
-  continuation_id: z.string().optional(),
 });
 
 export class AnalyzeTool extends BaseTool {
@@ -63,66 +59,8 @@ export class AnalyzeTool extends BaseTool {
   defaultTemperature = TEMPERATURE_ANALYTICAL;
   modelCategory = ToolModelCategory.EXTENDED_REASONING;
   
-  getInputSchema(): any {
-    const schema = {
-      type: 'object',
-      properties: {
-        files: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Files or directories to analyze (must be absolute paths)',
-        },
-        prompt: {
-          type: 'string',
-          description: 'What to analyze or look for',
-        },
-        model: {
-          type: 'string',
-          description: IS_AUTO_MODE 
-            ? this.getModelDescription()
-            : `Model to use. Default: ${process.env.DEFAULT_MODEL || 'auto'}`,
-        },
-        analysis_type: {
-          type: 'string',
-          enum: ['architecture', 'performance', 'security', 'quality', 'general'],
-          description: 'Type of analysis to perform',
-        },
-        output_format: {
-          type: 'string',
-          enum: ['summary', 'detailed', 'actionable'],
-          default: 'detailed',
-          description: 'How to format the output',
-        },
-        temperature: {
-          type: 'number',
-          description: 'Temperature (0-1, default 0.2)',
-          minimum: 0,
-          maximum: 1,
-        },
-        thinking_mode: {
-          type: 'string',
-          enum: ['minimal', 'low', 'medium', 'high', 'max'],
-          description: getThinkingModeDescription(),
-        },
-        use_websearch: {
-          type: 'boolean',
-          description: 'Enable web search for documentation, best practices, and current information. Particularly useful for: brainstorming sessions, architectural design discussions, exploring industry best practices, working with specific frameworks/technologies, researching solutions to complex problems, or when current documentation and community insights would enhance the analysis.',
-          default: true,
-        },
-        continuation_id: {
-          type: 'string',
-          description: 'Thread continuation ID for multi-turn conversations. Can be used to continue conversations across different tools. Only provide this if continuing a previous conversation thread.',
-        },
-      },
-      required: ['files', 'prompt'],
-    };
-    
-    // Add model to required fields if in auto mode
-    if (IS_AUTO_MODE) {
-      schema.required.push('model');
-    }
-    
-    return schema;
+  getZodSchema() {
+    return AnalyzeRequestSchema;
   }
   
   getSystemPrompt(): string {
@@ -131,8 +69,8 @@ export class AnalyzeTool extends BaseTool {
   
   async execute(args: AnalyzeRequest): Promise<ToolOutput> {
     try {
-      // Validate request
-      const validatedRequest = AnalyzeRequestSchema.parse(args);
+      // Validate request using the base method
+      const validatedRequest = this.validateArgs<z.infer<typeof AnalyzeRequestSchema>>(args);
       logger.debug('Analyze request validated', { 
         files: validatedRequest.files.length,
         analysisType: validatedRequest.analysis_type || 'general',
