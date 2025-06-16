@@ -1,7 +1,7 @@
 {
   "name": "zenode-mcp-server",
   "version": "1.0.0",
-  "description": "Node.js implementation of the Model Context Protocol (MCP) server that orchestrates multiple AI models",
+  "description": "Node.js port+ of the Zen Model Context Protocol (MCP) server that orchestrates multiple AI models",
   "main": "dist/index.js",
   "type": "module",
   "engines": {
@@ -41,7 +41,7 @@
     "dotenv": "^16.4.5",
     "glob": "^11.0.3",
     "openai": "^4.72.0",
-    "redis": "^4.7.0",
+    "redis": "^4.7.1",
     "tiktoken": "^1.0.17",
     "winston": "^3.15.0",
     "winston-daily-rotate-file": "^5.0.0",

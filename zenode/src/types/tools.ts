@@ -139,6 +139,14 @@ export interface TestGenRequest extends ToolRequest {
   test_examples?: string[];
 }
 
+export interface ConfigRequest extends ToolRequest {
+  action: 'setup' | 'list' | 'validate' | 'reset';
+  provider?: 'gemini' | 'openai' | 'openrouter' | 'custom';
+  api_key?: string;
+  custom_url?: string;
+  custom_model?: string;
+}
+
 // Special status responses from tools
 export interface ClarificationRequired {
   status: 'clarification_required';

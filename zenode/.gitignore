@@ -80,3 +80,25 @@ temp/
 # package-lock.json
 yarn.lock
 pnpm-lock.yaml
+
+# Zenode specific ignores
+.zenode/
+*.zenode/
+.zenode-*/
+
+# Zenode conversation logs
+conversation-logs/
+.zenode/conversation-logs/
+
+# Zenode grunts workspace and outputs
+.zenode/tools/zn-grunts/workspace/
+.zenode/tools/zn-grunts/docker/
+/tmp/grunt-*/
+
+# Generated game outputs
+latest-racing-game/
+latest-tank-game/
+workspace/
+
+# Docker-related zenode files
+docker-compose.override.yml

@@ -21,7 +21,15 @@ This unusual folder structure is temporary but beneficial for LLM and agent-assi
    cp .env.example .env
    ```
 
-2. **Add your API key** (choose one):
+2. **Configure API keys** (choose one):
+   
+   **Option A: Interactive Configuration Tool** (Recommended):
+   ```bash
+   # Use the built-in config tool for guided setup
+   zenode:config setup
+   ```
+   
+   **Option B: Manual Configuration**:
    ```bash
    # Edit .env file and add at least one:
    GEMINI_API_KEY=your_gemini_api_key_here
@@ -167,6 +175,40 @@ npm run dev
 
 ## Configuration
 
+### Interactive Configuration Tool
+
+The easiest way to configure zenode is using the built-in configuration tool:
+
+```bash
+# Get setup instructions
+zenode:config setup
+
+# Configure a specific provider
+zenode:config setup --provider gemini --api_key YOUR_KEY
+zenode:config setup --provider openai --api_key YOUR_KEY
+zenode:config setup --provider openrouter --api_key YOUR_KEY
+zenode:config setup --provider custom --custom_url http://localhost:11434
+
+# List current configuration
+zenode:config list
+
+# Validate configuration
+zenode:config validate
+
+# Reset all API keys
+zenode:config reset
+```
+
+#### Provider Options
+
+**🚀 OpenRouter (Recommended)**: Single API key for access to 100+ models including Claude, GPT, and Gemini. Get your key at [openrouter.ai/keys](https://openrouter.ai/keys).
+
+**⚡ Google Gemini**: Fast and powerful with excellent reasoning. Get your key at [makersuite.google.com](https://makersuite.google.com/app/apikey).
+
+**🤖 OpenAI**: Access to o3, o4-mini and other reasoning models. Get your key at [platform.openai.com](https://platform.openai.com/api-keys).
+
+**🏠 Local Models**: Run local models with Ollama, vLLM, or other custom endpoints. No API costs, runs on your hardware.
+
 ### Environment Variables
 
 | Variable | Description | Required | Default |
@@ -285,6 +327,14 @@ Comprehensive test generation with edge cases
 Local file access bridge for containerized tools
 ```
 @zenode.gopher "Read and analyze project structure"
+```
+
+#### 9. Config
+Interactive CLI configuration for API keys and settings
+```
+@zenode.config "setup"
+@zenode.config "list"
+@zenode.config "validate"
 ```
 
 ### Thinking Modes

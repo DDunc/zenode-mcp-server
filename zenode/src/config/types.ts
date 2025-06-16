@@ -73,7 +73,7 @@ export const DEFAULT_CONFIG: ZenodeConfig = {
     format: 'markdown'
   },
   shortcuts: {
-    coordinationPrefix: 'z:',
+    coordinationPrefix: ':z',
     toolInvocation: 'zenode:',
     minimumCoordinationTurns: 4,
     defaultCoordinationTools: ['analyze', 'thinkdeep', 'debug']
