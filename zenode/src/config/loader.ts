@@ -93,6 +93,7 @@ export class ConfigLoader {
       logging: { ...defaults.logging, ...userConfig.logging },
       shortcuts: { ...defaults.shortcuts, ...userConfig.shortcuts },
       server: { ...defaults.server, ...userConfig.server },
+      models: { ...defaults.models, ...userConfig.models },
       version: userConfig.version || defaults.version
     };
   }

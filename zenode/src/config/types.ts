@@ -11,6 +11,8 @@ export interface LoggingConfig {
   logPath: string;
   /** Whether to include full request/response data */
   includeFullData: boolean;
+  /** Output format for conversation logs */
+  format: 'json' | 'markdown';
 }
 
 export interface ShortcutsConfig {
@@ -18,6 +20,10 @@ export interface ShortcutsConfig {
   coordinationPrefix: string;
   /** Full tool invocation prefix (e.g., "zenode:") */
   toolInvocation: string;
+  /** Minimum number of tools to coordinate when using :z command */
+  minimumCoordinationTurns: number;
+  /** Default tools to use for :z coordination */
+  defaultCoordinationTools: string[];
 }
 
 export interface ServerConfig {
@@ -63,11 +69,14 @@ export const DEFAULT_CONFIG: ZenodeConfig = {
     conversationTrigger: ':z',
     enabled: true,
     logPath: '.zenode/conversation-logs',
-    includeFullData: true
+    includeFullData: true,
+    format: 'markdown'
   },
   shortcuts: {
     coordinationPrefix: 'z:',
-    toolInvocation: 'zenode:'
+    toolInvocation: 'zenode:',
+    minimumCoordinationTurns: 4,
+    defaultCoordinationTools: ['analyze', 'thinkdeep', 'debug']
   },
   server: {
     requestTimeout: 30000,

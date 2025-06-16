@@ -14,7 +14,9 @@ const config: ZenodeConfig = {
     conversationTrigger: ':z',
     enabled: true,
     logPath: '.zenode/conversation-logs',
-    includeFullData: true
+    includeFullData: true,
+    // Output format: 'json' for structured data, 'markdown' for readable conversations
+    format: 'markdown'
   },
   
   shortcuts: {
@@ -23,7 +25,13 @@ const config: ZenodeConfig = {
     coordinationPrefix: 'z:',
     
     // Full tool invocation prefix (for future use)
-    toolInvocation: 'zenode:'
+    toolInvocation: 'zenode:',
+    
+    // Minimum number of tools to coordinate when using :z command
+    minimumCoordinationTurns: 4,
+    
+    // Default tools to use for :z coordination
+    defaultCoordinationTools: ['analyze', 'thinkdeep', 'debug']
   },
   
   server: {
