@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
 from config import MCP_PROMPT_SIZE_LIMIT
 from providers import ModelProvider, ModelProviderRegistry
+from providers.base import ProviderType
 from utils import check_token_limit
 from utils.conversation_memory import (
     MAX_CONVERSATION_TURNS,
@@ -84,14 +85,52 @@ class ToolRequest(BaseModel):
             "additional findings, or answers to follow-up questions. Can be used across different tools."
         ),
     )
+    images: Optional[list[str]] = Field(
+        None,
+        description=(
+            "Optional image(s) for visual context. Accepts absolute file paths or "
+            "base64 data URLs. Only provide when user explicitly mentions images. "
+            "When including images, please describe what you believe each image contains "
+            "(e.g., 'screenshot of error dialog', 'architecture diagram', 'code snippet') "
+            "to aid with contextual understanding. Useful for UI discussions, diagrams, "
+            "visual problems, error screens, architecture mockups, and visual analysis tasks."
+        ),
+    )
 
 
 class BaseTool(ABC):
+    # Class-level cache for OpenRouter registry to avoid multiple loads
+    _openrouter_registry_cache = None
+
     """
     Abstract base class for all Gemini tools.
 
     This class defines the interface that all tools must implement and provides
     common functionality for request handling, model creation, and response formatting.
+
+    CONVERSATION-AWARE FILE PROCESSING:
+    This base class implements the sophisticated dual prioritization strategy for
+    conversation-aware file handling across all tools:
+
+    1. FILE DEDUPLICATION WITH NEWEST-FIRST PRIORITY:
+       - When same file appears in multiple conversation turns, newest reference wins
+       - Prevents redundant file embedding while preserving most recent file state
+       - Cross-tool file tracking ensures consistent behavior across analyze → codereview → debug
+
+    2. CONVERSATION CONTEXT INTEGRATION:
+       - All tools receive enhanced prompts with conversation history via reconstruct_thread_context()
+       - File references from previous turns are preserved and accessible
+       - Cross-tool knowledge transfer maintains full context without manual file re-specification
+
+    3. TOKEN-AWARE FILE EMBEDDING:
+       - Respects model-specific token allocation budgets from ModelContext
+       - Prioritizes conversation history, then newest files, then remaining content
+       - Graceful degradation when token limits are approached
+
+    4. STATELESS-TO-STATEFUL BRIDGING:
+       - Tools operate on stateless MCP requests but access full conversation state
+       - Conversation memory automatically injected via continuation_id parameter
+       - Enables natural AI-to-AI collaboration across tool boundaries
 
     To create a new tool:
     1. Create a new class that inherits from BaseTool
@@ -99,6 +138,20 @@ class BaseTool(ABC):
     3. Define a request model that inherits from ToolRequest
     4. Register the tool in server.py's TOOLS dictionary
     """
+
+    # Class-level cache for OpenRouter registry to avoid repeated loading
+    _openrouter_registry_cache = None
+
+    @classmethod
+    def _get_openrouter_registry(cls):
+        """Get cached OpenRouter registry instance, creating if needed."""
+        # Use BaseTool class directly to ensure cache is shared across all subclasses
+        if BaseTool._openrouter_registry_cache is None:
+            from providers.openrouter_registry import OpenRouterModelRegistry
+
+            BaseTool._openrouter_registry_cache = OpenRouterModelRegistry()
+            logger.debug("Created cached OpenRouter registry instance")
+        return BaseTool._openrouter_registry_cache
 
     def __init__(self):
         # Cache tool metadata at initialization to avoid repeated calls
@@ -160,6 +213,20 @@ class BaseTool(ABC):
         """
         pass
 
+    @classmethod
+    def _get_openrouter_registry(cls):
+        """Get cached OpenRouter registry instance."""
+        if BaseTool._openrouter_registry_cache is None:
+            import logging
+
+            from providers.openrouter_registry import OpenRouterModelRegistry
+
+            logger = logging.getLogger(__name__)
+            logger.info("Loading OpenRouter registry for the first time (will be cached for all tools)")
+            BaseTool._openrouter_registry_cache = OpenRouterModelRegistry()
+
+        return BaseTool._openrouter_registry_cache
+
     def is_effective_auto_mode(self) -> bool:
         """
         Check if we're in effective auto mode for schema generation.
@@ -215,48 +282,62 @@ class BaseTool(ABC):
 
     def _get_available_models(self) -> list[str]:
         """
-        Get list of models that are actually available with current API keys.
+        Get list of all possible models for the schema enum.
 
-        This respects model restrictions automatically.
+        In auto mode, we show ALL models from MODEL_CAPABILITIES_DESC so Claude
+        can see all options, even if some require additional API configuration.
+        Runtime validation will handle whether a model is actually available.
 
         Returns:
-            List of available model names
+            List of all model names from config
         """
         from config import MODEL_CAPABILITIES_DESC
-        from providers.base import ProviderType
-        from providers.registry import ModelProviderRegistry
 
-        # Get available models from registry (respects restrictions)
-        available_models_map = ModelProviderRegistry.get_available_models(respect_restrictions=True)
-        available_models = list(available_models_map.keys())
+        # Start with all models from MODEL_CAPABILITIES_DESC
+        all_models = list(MODEL_CAPABILITIES_DESC.keys())
 
-        # Add model aliases if their targets are available
-        model_aliases = []
-        for alias, target in MODEL_CAPABILITIES_DESC.items():
-            if alias not in available_models and target in available_models:
-                model_aliases.append(alias)
+        # Add OpenRouter models if OpenRouter is configured
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        if openrouter_key and openrouter_key != "your_openrouter_api_key_here":
+            try:
+                registry = self._get_openrouter_registry()
+                # Add all aliases from the registry (includes OpenRouter cloud models)
+                for alias in registry.list_aliases():
+                    if alias not in all_models:
+                        all_models.append(alias)
+            except Exception as e:
+                import logging
 
-        available_models.extend(model_aliases)
+                logging.debug(f"Failed to add OpenRouter models to enum: {e}")
 
-        # Also check if OpenRouter is available (it accepts any model)
-        openrouter_provider = ModelProviderRegistry.get_provider(ProviderType.OPENROUTER)
-        if openrouter_provider and not available_models:
-            # If only OpenRouter is available, suggest using any model through it
-            available_models.append("any model via OpenRouter")
+        # Add custom models if custom API is configured
+        custom_url = os.getenv("CUSTOM_API_URL")
+        if custom_url:
+            try:
+                registry = self._get_openrouter_registry()
+                # Find all custom models (is_custom=true)
+                for alias in registry.list_aliases():
+                    config = registry.resolve(alias)
+                    if config and hasattr(config, "is_custom") and config.is_custom:
+                        if alias not in all_models:
+                            all_models.append(alias)
+            except Exception as e:
+                import logging
 
-        if not available_models:
-            # Check if it's due to restrictions
-            from utils.model_restrictions import get_restriction_service
+                logging.debug(f"Failed to add custom models to enum: {e}")
 
-            restriction_service = get_restriction_service()
-            restrictions = restriction_service.get_restriction_summary()
+        # Note: MODEL_CAPABILITIES_DESC already includes both short aliases (e.g., "flash", "o3")
+        # and full model names (e.g., "gemini-2.5-flash-preview-05-20") as keys
 
-            if restrictions:
-                return ["none - all models blocked by restrictions set in .env"]
-            else:
-                return ["none - please configure API keys"]
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_models = []
+        for model in all_models:
+            if model not in seen:
+                seen.add(model)
+                unique_models.append(model)
 
-        return available_models
+        return unique_models
 
     def get_model_field_schema(self) -> dict[str, Any]:
         """
@@ -287,14 +368,42 @@ class BaseTool(ABC):
             for model, desc in MODEL_CAPABILITIES_DESC.items():
                 model_desc_parts.append(f"- '{model}': {desc}")
 
+            # Add custom models if custom API is configured
+            custom_url = os.getenv("CUSTOM_API_URL")
+            if custom_url:
+                # Load custom models from registry
+                try:
+                    registry = self._get_openrouter_registry()
+                    model_desc_parts.append(f"\nCustom models via {custom_url}:")
+
+                    # Find all custom models (is_custom=true)
+                    for alias in registry.list_aliases():
+                        config = registry.resolve(alias)
+                        if config and hasattr(config, "is_custom") and config.is_custom:
+                            # Format context window
+                            context_tokens = config.context_window
+                            if context_tokens >= 1_000_000:
+                                context_str = f"{context_tokens // 1_000_000}M"
+                            elif context_tokens >= 1_000:
+                                context_str = f"{context_tokens // 1_000}K"
+                            else:
+                                context_str = str(context_tokens)
+
+                            desc_line = f"- '{alias}' ({context_str} context): {config.description}"
+                            if desc_line not in model_desc_parts:  # Avoid duplicates
+                                model_desc_parts.append(desc_line)
+                except Exception as e:
+                    import logging
+
+                    logging.debug(f"Failed to load custom model descriptions: {e}")
+                    model_desc_parts.append(f"\nCustom models: Models available via {custom_url}")
+
             if has_openrouter:
                 # Add OpenRouter models with descriptions
                 try:
                     import logging
 
-                    from providers.openrouter_registry import OpenRouterModelRegistry
-
-                    registry = OpenRouterModelRegistry()
+                    registry = self._get_openrouter_registry()
 
                     # Group models by their model_name to avoid duplicates
                     seen_models = set()
@@ -343,10 +452,13 @@ class BaseTool(ABC):
                         "\nOpenRouter models: If configured, you can also use ANY model available on OpenRouter."
                     )
 
+            # Get all available models for the enum
+            all_models = self._get_available_models()
+
             return {
                 "type": "string",
                 "description": "\n".join(model_desc_parts),
-                "enum": list(MODEL_CAPABILITIES_DESC.keys()),
+                "enum": all_models,
             }
         else:
             # Normal mode - model is optional with default
@@ -357,11 +469,7 @@ class BaseTool(ABC):
             if has_openrouter:
                 # Add OpenRouter aliases
                 try:
-                    # Import registry directly to show available aliases
-                    # This works even without an API key
-                    from providers.openrouter_registry import OpenRouterModelRegistry
-
-                    registry = OpenRouterModelRegistry()
+                    registry = self._get_openrouter_registry()
                     aliases = registry.list_aliases()
 
                     # Show ALL aliases from the configuration
@@ -546,12 +654,33 @@ class BaseTool(ABC):
         arguments: Optional[dict] = None,
     ) -> tuple[str, list[str]]:
         """
-        Centralized file processing for tool prompts.
+        Centralized file processing implementing dual prioritization strategy.
 
-        This method handles the common pattern across all tools:
-        1. Filter out files already embedded in conversation history
-        2. Read content of only new files
-        3. Generate informative note about skipped files
+        DUAL PRIORITIZATION STRATEGY CORE IMPLEMENTATION:
+        This method is the heart of conversation-aware file processing across all tools:
+
+        1. CONVERSATION-AWARE FILE DEDUPLICATION:
+           - Automatically detects and filters files already embedded in conversation history
+           - Implements newest-first prioritization: when same file appears in multiple turns,
+             only the newest reference is preserved to avoid redundant content
+           - Cross-tool file tracking ensures consistent behavior across tool boundaries
+
+        2. TOKEN-BUDGET OPTIMIZATION:
+           - Respects remaining token budget from conversation context reconstruction
+           - Prioritizes conversation history + newest file versions within constraints
+           - Graceful degradation when token limits approached (newest files preserved first)
+           - Model-specific token allocation ensures optimal context window utilization
+
+        3. CROSS-TOOL CONTINUATION SUPPORT:
+           - File references persist across different tools (analyze → codereview → debug)
+           - Previous tool file embeddings are tracked and excluded from new embeddings
+           - Maintains complete file context without manual re-specification
+
+        PROCESSING WORKFLOW:
+        1. Filter out files already embedded in conversation history using newest-first priority
+        2. Read content of only new files within remaining token budget
+        3. Generate informative notes about skipped files for user transparency
+        4. Return formatted content ready for prompt inclusion
 
         Args:
             request_files: List of files requested for current tool execution
@@ -936,6 +1065,184 @@ When recommending searches, be specific about what information you need and why 
             }
         return None
 
+    def _validate_image_limits(
+        self, images: Optional[list[str]], model_name: str, continuation_id: Optional[str] = None
+    ) -> Optional[dict]:
+        """
+        Validate image size against model capabilities at MCP boundary.
+
+        This performs strict validation to ensure we don't exceed model-specific
+        image size limits. Uses capability-based validation with actual model
+        configuration rather than hard-coded limits.
+
+        Args:
+            images: List of image paths/data URLs to validate
+            model_name: Name of the model to check limits against
+
+        Returns:
+            Optional[dict]: Error response if validation fails, None if valid
+        """
+        if not images:
+            return None
+
+        # Get model capabilities to check image support and size limits
+        try:
+            provider = self.get_model_provider(model_name)
+            capabilities = provider.get_capabilities(model_name)
+        except Exception as e:
+            logger.warning(f"Failed to get capabilities for model {model_name}: {e}")
+            # Fall back to checking custom models configuration
+            capabilities = None
+
+        # Check if model supports images at all
+        supports_images = False
+        max_size_mb = 0.0
+
+        if capabilities:
+            supports_images = capabilities.supports_images
+            max_size_mb = capabilities.max_image_size_mb
+        else:
+            # Fall back to custom models configuration
+            try:
+                import json
+                from pathlib import Path
+
+                custom_models_path = Path(__file__).parent.parent / "conf" / "custom_models.json"
+                if custom_models_path.exists():
+                    with open(custom_models_path) as f:
+                        custom_config = json.load(f)
+
+                    # Check if model is in custom models list
+                    for model_config in custom_config.get("models", []):
+                        if model_config.get("model_name") == model_name or model_name in model_config.get(
+                            "aliases", []
+                        ):
+                            supports_images = model_config.get("supports_images", False)
+                            max_size_mb = model_config.get("max_image_size_mb", 0.0)
+                            break
+            except Exception as e:
+                logger.warning(f"Failed to load custom models config: {e}")
+
+        # If model doesn't support images, reject
+        if not supports_images:
+            return {
+                "status": "error",
+                "content": (
+                    f"Image support not available: Model '{model_name}' does not support image processing. "
+                    f"Please use a vision-capable model such as 'gemini-2.5-flash-preview-05-20', 'o3', "
+                    f"or 'claude-3-opus' for image analysis tasks."
+                ),
+                "content_type": "text",
+                "metadata": {
+                    "error_type": "validation_error",
+                    "model_name": model_name,
+                    "supports_images": False,
+                    "image_count": len(images),
+                },
+            }
+
+        # Calculate total size of all images
+        total_size_mb = 0.0
+        for image_path in images:
+            try:
+                if image_path.startswith("data:image/"):
+                    # Handle data URL: data:image/png;base64,iVBORw0...
+                    _, data = image_path.split(",", 1)
+                    # Base64 encoding increases size by ~33%, so decode to get actual size
+                    import base64
+
+                    actual_size = len(base64.b64decode(data))
+
+                    actual_size = len(base64.b64decode(data))
+                    total_size_mb += actual_size / (1024 * 1024)
+                else:
+                    # Handle file path
+                    if os.path.exists(image_path):
+                        file_size = os.path.getsize(image_path)
+                        total_size_mb += file_size / (1024 * 1024)
+                    else:
+                        logger.warning(f"Image file not found: {image_path}")
+                        # Assume a reasonable size for missing files to avoid breaking validation
+                        total_size_mb += 1.0  # 1MB assumption
+            except Exception as e:
+                logger.warning(f"Failed to get size for image {image_path}: {e}")
+                # Assume a reasonable size for problematic files
+                total_size_mb += 1.0  # 1MB assumption
+
+        # Apply 40MB cap for custom models as requested
+        effective_limit_mb = max_size_mb
+        if hasattr(capabilities, "provider") and capabilities.provider == ProviderType.CUSTOM:
+            effective_limit_mb = min(max_size_mb, 40.0)
+        elif not capabilities:  # Fallback case for custom models
+            effective_limit_mb = min(max_size_mb, 40.0)
+
+        # Validate against size limit
+        if total_size_mb > effective_limit_mb:
+            return {
+                "status": "error",
+                "content": (
+                    f"Image size limit exceeded: Model '{model_name}' supports maximum {effective_limit_mb:.1f}MB "
+                    f"for all images combined, but {total_size_mb:.1f}MB was provided. "
+                    f"Please reduce image sizes or count and try again."
+                ),
+                "content_type": "text",
+                "metadata": {
+                    "error_type": "validation_error",
+                    "model_name": model_name,
+                    "total_size_mb": round(total_size_mb, 2),
+                    "limit_mb": round(effective_limit_mb, 2),
+                    "image_count": len(images),
+                    "supports_images": supports_images,
+                },
+            }
+
+        # All validations passed
+        logger.debug(f"Image validation passed: {len(images)} images")
+        return None
+
+    def estimate_tokens_smart(self, file_path: str) -> int:
+        """
+        Estimate tokens for a file using file-type aware ratios.
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            int: Estimated token count
+        """
+        from utils.file_utils import estimate_file_tokens
+
+        return estimate_file_tokens(file_path)
+
+    def check_total_file_size(self, files: list[str]) -> Optional[dict[str, Any]]:
+        """
+        Check if total file sizes would exceed token threshold before embedding.
+
+        IMPORTANT: This performs STRICT REJECTION at MCP boundary.
+        No partial inclusion - either all files fit or request is rejected.
+        This forces Claude to make better file selection decisions.
+
+        Args:
+            files: List of file paths to check
+
+        Returns:
+            Dict with `code_too_large` response if too large, None if acceptable
+        """
+        if not files:
+            return None
+
+        # Get current model name for context-aware thresholds
+        model_name = getattr(self, "_current_model_name", None)
+        if not model_name:
+            from config import DEFAULT_MODEL
+
+            model_name = DEFAULT_MODEL
+
+        # Use centralized file size checking with model context
+        from utils.file_utils import check_total_file_size as check_file_size_utility
+
+        return check_file_size_utility(files, model_name)
+
     def handle_prompt_file(self, files: Optional[list[str]]) -> tuple[Optional[str], Optional[list[str]]]:
         """
         Check for and handle prompt.txt in the files list.
@@ -1043,6 +1350,9 @@ When recommending searches, be specific about what information you need and why 
                 )
                 return [TextContent(type="text", text=error_output.model_dump_json())]
 
+            # Extract and validate images from request
+            images = getattr(request, "images", None) or []
+
             # Check if we have continuation_id - if so, conversation history is already embedded
             continuation_id = getattr(request, "continuation_id", None)
 
@@ -1127,6 +1437,12 @@ When recommending searches, be specific about what information you need and why 
             # Only set this after auto mode validation to prevent "auto" being used as a model name
             self._current_model_name = model_name
 
+            # Validate images at MCP boundary if any were provided
+            if images:
+                image_validation_error = self._validate_image_limits(images, model_name, continuation_id)
+                if image_validation_error:
+                    return [TextContent(type="text", text=json.dumps(image_validation_error))]
+
             temperature = getattr(request, "temperature", None)
             if temperature is None:
                 temperature = self.get_default_temperature()
@@ -1159,6 +1475,7 @@ When recommending searches, be specific about what information you need and why 
                 system_prompt=system_prompt,
                 temperature=temperature,
                 thinking_mode=thinking_mode if provider.supports_thinking_mode(model_name) else None,
+                images=images if images else None,  # Pass images via kwargs
             )
 
             logger.info(f"Received response from {provider.get_provider_type().value} API for {self.name}")
@@ -1210,6 +1527,7 @@ When recommending searches, be specific about what information you need and why 
                         system_prompt=system_prompt,
                         temperature=temperature,
                         thinking_mode=thinking_mode if provider.supports_thinking_mode(model_name) else None,
+                        images=images if images else None,  # Pass images via kwargs in retry too
                     )
 
                     if retry_response.content:
@@ -1310,6 +1628,7 @@ When recommending searches, be specific about what information you need and why 
         continuation_id = getattr(request, "continuation_id", None)
         if continuation_id:
             request_files = getattr(request, "files", []) or []
+            request_images = getattr(request, "images", []) or []
             # Extract model metadata for conversation tracking
             model_provider = None
             model_name = None
@@ -1329,6 +1648,7 @@ When recommending searches, be specific about what information you need and why 
                 "assistant",
                 formatted_content,
                 files=request_files,
+                images=request_images,
                 tool_name=self.name,
                 model_provider=model_provider,
                 model_name=model_name,
@@ -1431,6 +1751,7 @@ When recommending searches, be specific about what information you need and why 
             # Use actually processed files from file preparation instead of original request files
             # This ensures directories are tracked as their individual expanded files
             request_files = getattr(self, "_actually_processed_files", []) or getattr(request, "files", []) or []
+            request_images = getattr(request, "images", []) or []
             # Extract model metadata
             model_provider = None
             model_name = None
@@ -1450,6 +1771,7 @@ When recommending searches, be specific about what information you need and why 
                 "assistant",
                 content,
                 files=request_files,
+                images=request_images,
                 tool_name=self.name,
                 model_provider=model_provider,
                 model_name=model_name,

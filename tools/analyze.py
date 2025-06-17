@@ -87,7 +87,13 @@ class AnalyzeTool(BaseTool):
                 },
                 "use_websearch": {
                     "type": "boolean",
-                    "description": "Enable web search for documentation, best practices, and current information. Particularly useful for: brainstorming sessions, architectural design discussions, exploring industry best practices, working with specific frameworks/technologies, researching solutions to complex problems, or when current documentation and community insights would enhance the analysis.",
+                    "description": (
+                        "Enable web search for documentation, best practices, and current information. "
+                        "Particularly useful for: brainstorming sessions, architectural design discussions, "
+                        "exploring industry best practices, working with specific frameworks/technologies, "
+                        "researching solutions to complex problems, or when current documentation and "
+                        "community insights would enhance the analysis."
+                    ),
                     "default": True,
                 },
                 "continuation_id": {
@@ -134,6 +140,14 @@ class AnalyzeTool(BaseTool):
         # Update request files list
         if updated_files is not None:
             request.files = updated_files
+
+        # MCP boundary check - STRICT REJECTION
+        if request.files:
+            file_size_check = self.check_total_file_size(request.files)
+            if file_size_check:
+                from tools.models import ToolOutput
+
+                raise ValueError(f"MCP_SIZE_CHECK:{ToolOutput(**file_size_check).model_dump_json()}")
 
         # Use centralized file processing logic
         continuation_id = getattr(request, "continuation_id", None)

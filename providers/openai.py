@@ -23,22 +23,40 @@ class OpenAIModelProvider(OpenAICompatibleProvider):
         "o3": {
             "context_window": 200_000,  # 200K tokens
             "supports_extended_thinking": False,
+            "supports_images": True,  # O3 models support vision
+            "max_image_size_mb": 20.0,  # 20MB per OpenAI docs
         },
         "o3-mini": {
             "context_window": 200_000,  # 200K tokens
             "supports_extended_thinking": False,
+            "supports_images": True,  # O3 models support vision
+            "max_image_size_mb": 20.0,  # 20MB per OpenAI docs
         },
-        "o3-pro": {
+        "o3-pro-2025-06-10": {
             "context_window": 200_000,  # 200K tokens
             "supports_extended_thinking": False,
+            "supports_images": True,  # O3 models support vision
+            "max_image_size_mb": 20.0,  # 20MB per OpenAI docs
         },
+        # Aliases
+        "o3-pro": "o3-pro-2025-06-10",
         "o4-mini": {
             "context_window": 200_000,  # 200K tokens
             "supports_extended_thinking": False,
+            "supports_images": True,  # O4 models support vision
+            "max_image_size_mb": 20.0,  # 20MB per OpenAI docs
         },
         "o4-mini-high": {
             "context_window": 200_000,  # 200K tokens
             "supports_extended_thinking": False,
+            "supports_images": True,  # O4 models support vision
+            "max_image_size_mb": 20.0,  # 20MB per OpenAI docs
+        },
+        "gpt-4.1-2025-04-14": {
+            "context_window": 1_000_000,  # 1M tokens
+            "supports_extended_thinking": False,
+            "supports_images": True,  # GPT-4.1 supports vision
+            "max_image_size_mb": 20.0,  # 20MB per OpenAI docs
         },
         # Shorthands
         "mini": "o4-mini",  # Default 'mini' to latest mini model
@@ -46,6 +64,7 @@ class OpenAIModelProvider(OpenAICompatibleProvider):
         "o4mini": "o4-mini",
         "o4minihigh": "o4-mini-high",
         "o4minihi": "o4-mini-high",
+        "gpt4.1": "gpt-4.1-2025-04-14",
     }
 
     def __init__(self, api_key: str, **kwargs):
@@ -72,11 +91,11 @@ class OpenAIModelProvider(OpenAICompatibleProvider):
         config = self.SUPPORTED_MODELS[resolved_name]
 
         # Define temperature constraints per model
-        if resolved_name in ["o3", "o3-mini", "o3-pro", "o4-mini", "o4-mini-high"]:
+        if resolved_name in ["o3", "o3-mini", "o3-pro", "o3-pro-2025-06-10", "o4-mini", "o4-mini-high"]:
             # O3 and O4 reasoning models only support temperature=1.0
             temp_constraint = FixedTemperatureConstraint(1.0)
         else:
-            # Other OpenAI models support 0.0-2.0 range
+            # Other OpenAI models (including GPT-4.1) support 0.0-2.0 range
             temp_constraint = RangeTemperatureConstraint(0.0, 2.0, 0.7)
 
         return ModelCapabilities(
@@ -88,6 +107,8 @@ class OpenAIModelProvider(OpenAICompatibleProvider):
             supports_system_prompts=True,
             supports_streaming=True,
             supports_function_calling=True,
+            supports_images=config.get("supports_images", False),
+            max_image_size_mb=config.get("max_image_size_mb", 0.0),
             temperature_constraint=temp_constraint,
         )
 

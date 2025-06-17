@@ -24,6 +24,10 @@ class DebugIssueRequest(ToolRequest):
         None,
         description="Files or directories that might be related to the issue (must be absolute paths)",
     )
+    images: Optional[list[str]] = Field(
+        None,
+        description="Optional images showing error screens, UI issues, logs displays, or visual debugging information",
+    )
     runtime_info: Optional[str] = Field(None, description="Environment, versions, or runtime information")
     previous_attempts: Optional[str] = Field(None, description="What has been tried already")
 
@@ -68,6 +72,11 @@ class DebugIssueTool(BaseTool):
                     "type": "array",
                     "items": {"type": "string"},
                     "description": "Files or directories that might be related to the issue (must be absolute paths)",
+                },
+                "images": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional images showing error screens, UI issues, logs displays, or visual debugging information",
                 },
                 "runtime_info": {
                     "type": "string",
@@ -149,6 +158,14 @@ class DebugIssueTool(BaseTool):
         # Update request files list
         if updated_files is not None:
             request.files = updated_files
+
+        # MCP boundary check - STRICT REJECTION
+        if request.files:
+            file_size_check = self.check_total_file_size(request.files)
+            if file_size_check:
+                from tools.models import ToolOutput
+
+                raise ValueError(f"MCP_SIZE_CHECK:{ToolOutput(**file_size_check).model_dump_json()}")
 
         # Build context sections
         context_parts = [f"=== ISSUE DESCRIPTION ===\n{request.prompt}\n=== END DESCRIPTION ==="]
