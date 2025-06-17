@@ -121,7 +121,7 @@ export class AnalyzeTool extends BaseTool {
       
       const formattedResponse = this.formatResponse(response.content, validatedRequest);
       
-      // Handle conversation threading
+      // Handle conversation threading with file tracking
       const continuationOffer = await this.handleConversationThreading(
         this.name,
         validatedRequest.prompt,
@@ -130,6 +130,8 @@ export class AnalyzeTool extends BaseTool {
         response.usage.inputTokens,
         response.usage.outputTokens,
         validatedRequest.continuation_id,
+        validatedRequest.files, // Track files provided by user
+        validatedRequest.files, // Same files were processed by tool
       );
       
       return this.formatOutput(

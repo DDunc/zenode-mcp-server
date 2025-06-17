@@ -33,6 +33,7 @@ services:
       - MCP_WORKSPACE=/workspace
     volumes:
       - ${MCP_WORKSPACE:-./workspace}:/workspace:ro
+      - ${HOME}:/home:rw
       - zenode-logs:/tmp
       - ./.zenode:/app/.zenode:rw
     depends_on:

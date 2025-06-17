@@ -1,0 +1,57 @@
+{
+  "bootstrap": {
+    "version": "1.0.0",
+    "first_run_complete": false,
+    "user_preferences": {
+      "auto_mount_home": true,
+      "enable_file_write_access": true,
+      "default_model": "auto",
+      "conversation_logging": true,
+      "workspace_mode": "full_access"
+    },
+    "prompts": {
+      "welcome": "🚀 Welcome to Zenode MCP Server! This is your first time running :z in this project.",
+      "permissions": "Zenode can access your entire home directory for maximum productivity. Continue?",
+      "model_selection": "Choose default model (auto/sonnet4/gemini-pro/custom):",
+      "logging": "Enable conversation logging for debugging? (recommended for development)",
+      "completion": "✅ Bootstrap complete! Zenode is ready for your creative development work."
+    },
+    "config_options": [
+      {
+        "key": "default_model",
+        "prompt": "Default AI model",
+        "options": ["auto", "sonnet4", "gemini-pro", "o3", "local"],
+        "default": "auto",
+        "description": "Model used when no specific model is requested"
+      },
+      {
+        "key": "file_access_mode", 
+        "prompt": "File access level",
+        "options": ["full", "project_only", "workspace_only"],
+        "default": "full",
+        "description": "How much of your filesystem zenode can access"
+      },
+      {
+        "key": "auto_restart_on_update",
+        "prompt": "Auto-restart server on code changes",
+        "options": ["yes", "no"],
+        "default": "yes", 
+        "description": "Automatically restart when zenode code is updated"
+      },
+      {
+        "key": "conversation_memory",
+        "prompt": "Conversation memory duration", 
+        "options": ["1h", "3h", "8h", "24h"],
+        "default": "3h",
+        "description": "How long to remember conversation context"
+      },
+      {
+        "key": "debug_logging",
+        "prompt": "Enable debug logging",
+        "options": ["yes", "no"],
+        "default": "yes",
+        "description": "Extra logging for troubleshooting (development recommended)"
+      }
+    ]
+  }
+}

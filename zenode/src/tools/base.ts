@@ -241,7 +241,11 @@ export abstract class BaseTool {
   }
 
   /**
-   * Handle conversation threading
+   * Handle conversation threading with file tracking
+   * 
+   * This method now captures the files used during tool execution and stores them
+   * in conversation turns to enable the newest-first file prioritization and 
+   * token-aware file management features.
    */
   protected async handleConversationThreading(
     toolName: string,
@@ -251,6 +255,8 @@ export abstract class BaseTool {
     inputTokens: number,
     outputTokens: number,
     continuationId?: string,
+    userFiles?: string[], // Files provided by user in this turn
+    processedFiles?: string[], // Files actually processed by the tool
   ): Promise<ContinuationOffer | null> {
     try {
       let threadId: string;
@@ -258,13 +264,31 @@ export abstract class BaseTool {
       if (continuationId) {
         // Continue existing thread
         threadId = continuationId;
-        await addTurn(threadId, 'user', userPrompt, { inputTokens, tool: toolName });
-        await addTurn(threadId, 'assistant', assistantResponse, { modelName: modelUsed, outputTokens, tool: toolName });
+        await addTurn(threadId, 'user', userPrompt, { 
+          inputTokens, 
+          tool: toolName, 
+          files: userFiles, // Track files provided by user
+        });
+        await addTurn(threadId, 'assistant', assistantResponse, { 
+          modelName: modelUsed, 
+          outputTokens, 
+          tool: toolName,
+          files: processedFiles, // Track files actually processed by tool
+        });
       } else {
         // Create new thread
         threadId = await createThread(toolName, modelUsed);
-        await addTurn(threadId, 'user', userPrompt, { inputTokens, tool: toolName });
-        await addTurn(threadId, 'assistant', assistantResponse, { modelName: modelUsed, outputTokens, tool: toolName });
+        await addTurn(threadId, 'user', userPrompt, { 
+          inputTokens, 
+          tool: toolName, 
+          files: userFiles, // Track files provided by user
+        });
+        await addTurn(threadId, 'assistant', assistantResponse, { 
+          modelName: modelUsed, 
+          outputTokens, 
+          tool: toolName,
+          files: processedFiles, // Track files actually processed by tool
+        });
       }
 
       // Get conversation stats

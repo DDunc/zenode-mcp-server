@@ -183,7 +183,7 @@ export class ThinkDeepTool extends BaseTool {
       // Format the response with the critical evaluation template
       const formattedResponse = this.formatResponse(response.content, validatedRequest, response.modelName);
       
-      // Handle conversation threading
+      // Handle conversation threading with file tracking
       const continuationOffer = await this.handleConversationThreading(
         this.name,
         validatedRequest.prompt,
@@ -192,6 +192,8 @@ export class ThinkDeepTool extends BaseTool {
         response.usage.inputTokens,
         response.usage.outputTokens,
         validatedRequest.continuation_id,
+        validatedRequest.files, // Track files provided by user
+        validatedRequest.files, // Same files were processed by tool
       );
       
       return this.formatOutput(

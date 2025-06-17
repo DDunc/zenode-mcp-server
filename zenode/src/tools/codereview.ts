@@ -196,7 +196,7 @@ export class CodeReviewTool extends BaseTool {
       // Generate response from AI
       const response = await provider.generateResponse(modelRequest);
       
-      // Handle conversation threading
+      // Handle conversation threading with file tracking
       const continuationOffer = await this.handleConversationThreading(
         this.name,
         validatedRequest.prompt,
@@ -205,6 +205,8 @@ export class CodeReviewTool extends BaseTool {
         response.usage.inputTokens,
         response.usage.outputTokens,
         validatedRequest.continuation_id,
+        validatedRequest.files, // Track files provided by user
+        validatedRequest.files, // Same files were processed by tool
       );
       
       return this.formatOutput(

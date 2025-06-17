@@ -9,6 +9,7 @@ import { BaseToolRequestSchema } from '../utils/schema-helpers.js';
 import { modelProviderRegistry } from '../providers/registry.js';
 import { TEMPERATURE_BALANCED } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { shouldShowBootstrapGuidance, getBootstrapWelcome } from '../utils/auto-bootstrap.js';
 
 /**
  * Chat tool request schema
@@ -67,6 +68,18 @@ Remember: You're a thinking partner, not just an answer machine. Engage with the
       
       logger.info(`Chat tool invoked with prompt length: ${validated.prompt.length}`);
       
+      // Check if this might be a first-time user who needs bootstrap guidance
+      const bootstrapCheck = shouldShowBootstrapGuidance();
+      if (bootstrapCheck.show) {
+        const welcome = getBootstrapWelcome();
+        logger.info(`First-time user detected: ${bootstrapCheck.reason}`);
+        
+        return this.formatOutput(
+          `${welcome}\n\n**Your Question:** "${validated.prompt}"\n\n*I'll answer your question once you complete the quick setup above!*`,
+          'success'
+        );
+      }
+      
       // Check prompt size
       this.checkPromptSize(validated.prompt);
       
@@ -119,7 +132,7 @@ Remember: You're a thinking partner, not just an answer machine. Engage with the
       logger.info(`Generating chat response with model: ${selectedModel}`);
       const response = await provider.generateResponse(modelRequest);
       
-      // Handle conversation threading
+      // Handle conversation threading with file tracking
       const continuationOffer = await this.handleConversationThreading(
         this.name,
         validated.prompt,
@@ -128,6 +141,8 @@ Remember: You're a thinking partner, not just an answer machine. Engage with the
         response.usage.inputTokens,
         response.usage.outputTokens,
         validated.continuation_id,
+        validated.files, // Track files provided by user
+        validated.files, // Same files were processed by tool
       );
       
       // Format output

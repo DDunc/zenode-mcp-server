@@ -48,6 +48,7 @@ import { TestGenTool } from './tools/testgen.js';
 import { GopherTool } from './tools/gopher.js';
 import { GruntsTool } from './tools/grunts.js';
 import { ConfigTool } from './tools/config.js';
+import { BootstrapTool } from './tools/bootstrap.js';
 
 // Create the MCP server instance with a unique name identifier
 // This name is used by MCP clients to identify and connect to this specific server
@@ -77,6 +78,7 @@ const TOOLS: Record<string, BaseTool> = {
   gopher: new GopherTool(), // Local file system access bridge
   grunts: new GruntsTool(), // Distributed LLM orchestration system
   config: new ConfigTool(), // Interactive CLI configuration tool
+  bootstrap: new BootstrapTool(), // First-time setup and project configuration
 };
 
 // Initialize middleware pipeline
