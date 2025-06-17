@@ -1,0 +1,116 @@
+version: '3.8'
+
+services:
+  # Status Service - Real-time monitoring dashboard
+  status-service:
+    build: ./docker/status-service
+    ports:
+      - "3030:3000"
+    volumes:
+      - ./workspace:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - NODE_ENV=production
+      - WORKSPACE_PATH=/workspace
+    networks:
+      - grunts-network
+    restart: unless-stopped
+
+  # LLM Worker 1 - JavaScript/TypeScript Specialist
+  grunt-worker-1:
+    build: ./docker/llm-containers
+    volumes:
+      - ./workspace/task1/worker1:/workspace
+      - ./templates:/templates:ro
+    environment:
+      - WORKER_ID=1
+      - MODEL=qwen2.5-coder:14b
+      - SPECIALIZATION=JavaScript/TypeScript
+      - MAX_EXECUTION_TIME=14400
+      - PARTIAL_ASSESSMENT_INTERVAL=1800
+      - REDIS_URL=redis://host.docker.internal:6380
+      - TASK_PROMPT=Create a tank deathmatch game
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    networks:
+      - grunts-network
+    depends_on:
+      - status-service
+    restart: unless-stopped
+    
+  # LLM Worker 2 - Advanced Web Development Specialist  
+  grunt-worker-2:
+    build:
+      context: ./docker/llm-containers
+      args:
+        - MODEL=qwen2.5-coder:32b
+        - SPECIALIZATION=advanced-web-dev
+    volumes:
+      - ./workspace/task1/worker2:/workspace
+      - ./templates:/templates:ro
+    environment:
+      - WORKER_ID=2
+      - MODEL=qwen2.5-coder:32b
+      - SPECIALIZATION=Advanced web development
+      - MAX_EXECUTION_TIME=14400
+      - PARTIAL_ASSESSMENT_INTERVAL=1800
+      - REDIS_URL=redis://host.docker.internal:6380
+      - TASK_PROMPT=Create a tank deathmatch game with AI opponents
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    networks:
+      - grunts-network
+    depends_on:
+      - status-service
+    restart: unless-stopped
+
+  # LLM Worker 3 - Game Development Specialist
+  grunt-worker-3:
+    build:
+      context: ./docker/llm-containers
+      args:
+        - MODEL=deepseek-coder:33b
+        - SPECIALIZATION=game-development
+    volumes:
+      - ./workspace/task1/worker3:/workspace
+      - ./templates:/templates:ro
+    environment:
+      - WORKER_ID=3
+      - MODEL=deepseek-coder:33b
+      - SPECIALIZATION=Game development
+      - MAX_EXECUTION_TIME=14400
+      - PARTIAL_ASSESSMENT_INTERVAL=1800
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+    networks:
+      - grunts-network
+    depends_on:
+      - status-service
+    restart: unless-stopped
+
+  # Test Runner - Comprehensive validation system
+  # test-runner:
+  #   build:
+  #     context: ./test-runner
+  #   volumes:
+  #     - ./workspace:/workspace
+  #     - ./test-runner:/test-runner
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   environment:
+  #     - NODE_ENV=test
+  #     - WORKSPACE_PATH=/workspace
+  #   networks:
+  #     - grunts-network
+  #   depends_on:
+  #     - grunt-worker-1
+  #     - grunt-worker-2
+  #     - grunt-worker-3
+  #   restart: unless-stopped
+
+
+networks:
+  grunts-network:
+    driver: bridge
+
+volumes:
+  workspace-data:
+    driver: local
+  test-results:
+    driver: local

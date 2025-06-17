@@ -7,7 +7,7 @@
     "includeFullData": true
   },
   "shortcuts": {
-    "coordinationPrefix": "z:",
+    "coordinationPrefix": ":z",
     "toolInvocation": "zenode:"
   },
   "server": {

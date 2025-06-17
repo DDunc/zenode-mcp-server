@@ -53,7 +53,21 @@
       "Bash(git rebase:*)",
       "Bash(EDITOR='sed -i \"s/update many things/update readme, gopherize all the things/\"' git rebase -i 685dda0^)",
       "Bash(git commit:*)",
-      "Bash(git filter-branch:*)"
+      "Bash(git filter-branch:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx typescript:*)",
+      "mcp__zenode__grunts",
+      "Bash(curl:*)",
+      "Bash(touch:*)",
+      "mcp__ide__executeCode",
+      "Bash(OPENROUTER_API_KEY=\"\" docker-compose up -d status-service grunt-worker-1 grunt-worker-2)",
+      "Bash(OPENROUTER_API_KEY=\"\" docker-compose up --build -d status-service grunt-worker-1 grunt-worker-2)",
+      "Bash(sed:*)",
+      "Bash(WORKER_ID=1 MODEL=qwen2.5-coder:14b SPECIALIZATION=\"JavaScript/TypeScript\" TASK_PROMPT=\"Create a tank deathmatch game with WASD controls, arrow keys for player 2, and AI tanks\" REDIS_URL=\"redis://localhost:6380\" PORT=3031 node real-llm-worker.js)",
+      "Bash(pkill:*)",
+      "Bash(WORKER_ID=2 MODEL=qwen2.5-coder:14b SPECIALIZATION=\"JavaScript/TypeScript\" TASK_PROMPT=\"Create a racing game with 3 different cars, multiple tracks, lap counting, and finish line detection. Include boost power-ups and obstacle avoidance.\" REDIS_URL=\"redis://localhost:6380\" PORT=4000 node real-llm-worker.js)",
+      "Bash(npx vite preview:*)",
+      "Bash(open:*)"
     ],
     "deny": []
   }

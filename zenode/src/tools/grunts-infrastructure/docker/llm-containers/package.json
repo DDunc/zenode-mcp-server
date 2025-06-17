@@ -1,0 +1,26 @@
+{
+  "name": "grunts-real-llm-worker",
+  "version": "2.0.0",
+  "description": "Real LLM Worker with Task-Aware Generation for Grunts",
+  "main": "real-llm-worker.js",
+  "type": "module",
+  "scripts": {
+    "start": "node real-llm-worker.js",
+    "legacy": "node grunt-worker.js",
+    "test": "echo 'Tests will be implemented by real LLM workers'",
+    "health-check": "curl -f http://localhost:3000/health"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.6.0",
+    "ws": "^8.16.0",
+    "node-fetch": "^3.3.2",
+    "fs-extra": "^11.2.0",
+    "redis": "^4.6.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "ZN-Grunts Real LLM System",
+  "license": "MIT"
+}

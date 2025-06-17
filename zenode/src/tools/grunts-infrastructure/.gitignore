@@ -1,0 +1,14 @@
+# Environment files with secrets
+.env
+
+# Node modules
+node_modules/
+
+# Workspace outputs
+workspace/
+
+# Docker volumes
+docker-data/
+
+# Logs
+*.log

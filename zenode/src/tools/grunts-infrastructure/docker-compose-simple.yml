@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # LLM Worker 1
+  grunt-worker-1:
+    build: ./docker/llm-containers
+    ports:
+      - "3031:3000"
+    volumes:
+      - ./workspace:/workspace
+    environment:
+      - WORKER_ID=1
+      - MODEL_NAME=qwen2.5-coder:14b
+      - SPECIALIZATION_TYPE=JavaScript/TypeScript
+    container_name: grunt-worker-1
+    restart: unless-stopped
+
+  # LLM Worker 2  
+  grunt-worker-2:
+    build: ./docker/llm-containers
+    ports:
+      - "3032:3000"
+    volumes:
+      - ./workspace:/workspace
+    environment:
+      - WORKER_ID=2
+      - MODEL_NAME=qwen2.5-coder:32b
+      - SPECIALIZATION_TYPE=Advanced web development
+    container_name: grunt-worker-2
+    restart: unless-stopped
+
+  # Status Service
+  grunts-status:
+    build: ./docker/status-service
+    ports:
+      - "3030:3030"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./workspace:/workspace
+    container_name: grunts-status-service
+    restart: unless-stopped
+    depends_on:
+      - grunt-worker-1
+      - grunt-worker-2
