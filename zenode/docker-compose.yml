@@ -31,9 +31,12 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - NODE_ENV=production
       - MCP_WORKSPACE=/workspace
+      - MCP_PROJECT_MOUNTED=${MCP_PROJECT_MOUNTED:-false}
+      - MCP_PROJECT_ROOT=${MCP_PROJECT_ROOT:-}
     volumes:
       - ${MCP_WORKSPACE:-./workspace}:/workspace:ro
       - ${HOME}:/home:rw
+      - ${MCP_PROJECT_ROOT:-/dev/null}:/project:ro
       - zenode-logs:/tmp
       - ./.zenode:/app/.zenode:rw
     depends_on:

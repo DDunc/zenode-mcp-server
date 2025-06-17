@@ -45,8 +45,14 @@ export function isPathSafe(filePath: string): boolean {
 export async function readFile(filePath: string): Promise<string> {
   const translatedPath = translatePathForEnvironment(filePath);
   
+  // Debug logging
+  logger.debug(`File access attempt: ${filePath}`);
+  logger.debug(`Translated path: ${translatedPath}`);
+  logger.debug(`MCP_WORKSPACE: ${MCP_WORKSPACE}`);
+  
   // Security check
   if (!isPathSafe(translatedPath)) {
+    logger.error(`Path security check failed: ${filePath} -> ${translatedPath} (workspace: ${MCP_WORKSPACE})`);
     throw new Error(`Access denied: Path outside workspace: ${filePath}`);
   }
 

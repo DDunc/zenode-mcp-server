@@ -9,6 +9,8 @@
  */
 
 import dotenv from 'dotenv';
+import path from 'path';
+import { existsSync } from 'fs';
 
 // Load environment variables
 dotenv.config();
@@ -114,7 +116,35 @@ export const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379/0';
 // Environment configuration
 export const NODE_ENV = process.env.NODE_ENV || 'development';
 export const LOG_LEVEL = process.env.LOG_LEVEL || 'INFO';
-export const MCP_WORKSPACE = process.env.MCP_WORKSPACE || process.cwd();
+// MCP Workspace - Should provide access to the full project, not just zenode subdirectory
+// Default to parent directory of zenode to access the entire project
+// If running from zenode directory, go up one level to project root
+const currentDir = process.cwd();
+const isInZenodeDir = currentDir.endsWith('zenode');
+const defaultWorkspace = isInZenodeDir ? path.join(currentDir, '..') : currentDir;
+export const MCP_WORKSPACE = process.env.MCP_WORKSPACE || defaultWorkspace;
+
+// Project detection - auto-detect when zenode is being used in a project
+export function detectProjectRoot(startPath?: string): string | null {
+  const searchPath = startPath || process.cwd();
+  const indicators = ['.git', 'package.json', 'Cargo.toml', 'pyproject.toml', 'go.mod', '.project'];
+  
+  let currentPath = path.resolve(searchPath);
+  while (currentPath !== path.dirname(currentPath)) {
+    for (const indicator of indicators) {
+      if (existsSync(path.join(currentPath, indicator))) {
+        return currentPath;
+      }
+    }
+    currentPath = path.dirname(currentPath);
+  }
+  return null;
+}
+
+// Auto-detect project root and suggest mounting
+export const PROJECT_ROOT = detectProjectRoot();
+export const IS_IN_PROJECT = PROJECT_ROOT !== null;
+export const NEEDS_PROJECT_MOUNT = IS_IN_PROJECT && !process.env.MCP_PROJECT_MOUNTED;
 
 // API Keys
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY;

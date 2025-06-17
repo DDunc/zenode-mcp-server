@@ -27,7 +27,7 @@ export class ChatTool extends BaseTool {
   description = 
     'GENERAL CHAT & COLLABORATIVE THINKING - AI thinking partner for development discussions. ' +
     'IMPORTANT: This tool MUST be used when explicitly invoked (e.g., "zenode:chat [your question]"). ' +
-    'SPECIAL SHORTHAND: If a message starts with "z:" it calls zenode:chat to coordinate with 3 other zenode tools (4 total). ' +
+    'SPECIAL SHORTHAND: If a message starts with ":z" it calls zenode:chat to coordinate with 3 other zenode tools (4 total). ' +
     'When coordinating, if unsure which tools to involve, default to: analyze, thinkdeep, and debug. ' +
     'Use this when you need to ask questions, brainstorm ideas, get opinions, discuss topics, ' +
     'share your thinking, or need explanations about concepts and approaches. ' +
@@ -71,13 +71,41 @@ Remember: You're a thinking partner, not just an answer machine. Engage with the
       // Check if this might be a first-time user who needs bootstrap guidance
       const bootstrapCheck = shouldShowBootstrapGuidance();
       if (bootstrapCheck.show) {
-        const welcome = getBootstrapWelcome();
-        logger.info(`First-time user detected: ${bootstrapCheck.reason}`);
+        logger.info(`First-time user detected: ${bootstrapCheck.reason} - Auto-triggering setup`);
         
-        return this.formatOutput(
-          `${welcome}\n\n**Your Question:** "${validated.prompt}"\n\n*I'll answer your question once you complete the quick setup above!*`,
-          'success'
-        );
+        // Auto-trigger bootstrap setup for first-time users
+        try {
+          const { BootstrapTool } = await import('./bootstrap.js');
+          const bootstrapTool = new BootstrapTool();
+          
+          const bootstrapResult = await bootstrapTool.execute({ 
+            action: 'auto-setup', 
+            skip_prompts: true,
+            auto_restart: true 
+          });
+          
+          // After bootstrap, continue with the original chat request
+          if (bootstrapResult.status === 'success') {
+            logger.info('Bootstrap completed successfully, continuing with chat');
+            // Continue with the chat execution below (don't return here)
+          } else {
+            // Bootstrap failed, show error and manual instructions
+            return this.formatOutput(`❌ **Auto-setup encountered an issue:**
+
+${bootstrapResult.content}
+
+**Your original question:** "${validated.prompt}"
+
+**Manual setup:** Try running \`:z bootstrap auto-setup\` manually`, 'error');
+          }
+        } catch (error) {
+          logger.error('Bootstrap auto-setup error:', error);
+          const welcome = getBootstrapWelcome();
+          return this.formatOutput(
+            `${welcome}\n\n**Your Question:** "${validated.prompt}"\n\n*Auto-setup failed. Please run the bootstrap command manually.*`,
+            'error'
+          );
+        }
       }
       
       // Check prompt size
