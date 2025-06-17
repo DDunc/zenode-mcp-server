@@ -1,0 +1,19 @@
+{
+  "name": "grunts-test-runner",
+  "version": "1.0.0",
+  "description": "Comprehensive test validation system for Grunts distributed LLM orchestration",
+  "type": "module",
+  "scripts": {
+    "test": "echo 'Test runner ready'",
+    "validate:all": "node main.js",
+    "validate:worker": "node main.js --worker"
+  },
+  "dependencies": {
+    "puppeteer": "^22.8.2",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "@types/node": "^20.10.6"
+  }
+}

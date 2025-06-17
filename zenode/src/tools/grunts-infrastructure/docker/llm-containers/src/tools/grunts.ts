@@ -70,7 +70,6 @@ export class GruntsTool extends BaseTool {
   modelCategory = 'all' as const;
 
   private gruntsWorkspace = '.zenode/tools/zn-grunts';
-  private gruntsInfrastructure = 'src/tools/grunts-infrastructure';
   private statusPort = 3030;
 
   getZodSchema() {
@@ -160,64 +159,10 @@ Guidelines:
   }
 
   /**
-   * Ensure infrastructure files are available in workspace
-   */
-  private async ensureInfrastructure(): Promise<void> {
-    const workspacePath = join(process.cwd(), this.gruntsWorkspace);
-    const infrastructurePath = join(process.cwd(), this.gruntsInfrastructure);
-    
-    try {
-      // Check if workspace infrastructure exists
-      await fs.access(workspacePath);
-      logger.debug('Grunts workspace already exists');
-    } catch {
-      // Copy infrastructure files to workspace
-      logger.info('📦 Setting up grunts infrastructure...');
-      
-      try {
-        await fs.access(infrastructurePath);
-        
-        // Create parent directory
-        await fs.mkdir(join(process.cwd(), '.zenode/tools'), { recursive: true });
-        
-        // Copy infrastructure to workspace
-        await this.copyDirectory(infrastructurePath, workspacePath);
-        
-        logger.info('✅ Grunts infrastructure copied successfully');
-      } catch (error) {
-        throw new Error(`Failed to copy grunts infrastructure: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-  }
-
-  /**
-   * Recursively copy directory
-   */
-  private async copyDirectory(src: string, dest: string): Promise<void> {
-    await fs.mkdir(dest, { recursive: true });
-    
-    const entries = await fs.readdir(src, { withFileTypes: true });
-    
-    for (const entry of entries) {
-      const srcPath = join(src, entry.name);
-      const destPath = join(dest, entry.name);
-      
-      if (entry.isDirectory()) {
-        await this.copyDirectory(srcPath, destPath);
-      } else {
-        await fs.copyFile(srcPath, destPath);
-      }
-    }
-  }
-
-  /**
    * Initialize the grunts workspace with cleanup
    */
   private async initializeWorkspace(): Promise<void> {
     const workspacePath = join(process.cwd(), this.gruntsWorkspace);
-    
-    // Ensure infrastructure files are available
-    await this.ensureInfrastructure();
     
     // Clean up previous execution outputs
     await this.cleanupPreviousWorkspace(workspacePath);
@@ -287,7 +232,7 @@ Guidelines:
       logger.info('✅ Previous workspace cleaned up successfully');
       
     } catch (error) {
-      logger.warn(`⚠️ Workspace cleanup warning: ${error instanceof Error ? error.message : String(error)}`);
+      logger.warn(`⚠️ Workspace cleanup warning: ${error.message}`);
       // Continue execution even if cleanup fails
     }
   }
@@ -880,7 +825,7 @@ CMD ["node", "./workers/real-llm-worker.js"]
       return {
         executionTime: Date.now() - startTime,
         containers: {},
-        error: error instanceof Error ? error.message : String(error)
+        error: error.message
       };
     }
   }
@@ -896,24 +841,24 @@ CMD ["node", "./workers/real-llm-worker.js"]
       const testResults = await this.runComprehensiveValidation(results);
       
       // Step 2: Analyze both implementations
-      const analysisResults = await this.analyzeImplementations(results);
+      const analysisResults = await this.analyzeImplementations(results, testResults);
       
       // Step 3: Debug any issues found
-      const debugResults = await this.debugImplementations(results, analysisResults);
+      const debugResults = await this.debugImplementations(results, analysisResults, testResults);
       
       // Step 4: Code review for quality assessment
-      const reviewResults = await this.reviewImplementations(results);
+      const reviewResults = await this.reviewImplementations(results, testResults);
       
       // Step 5: Deep thinking for final evaluation and improvements
-      const finalEvaluation = await this.conductFinalEvaluation(results, analysisResults, debugResults, reviewResults);
+      const finalEvaluation = await this.conductFinalEvaluation(results, analysisResults, debugResults, reviewResults, testResults);
       
       // Step 6: Deploy implementations to hosting ports
-      await this.deployImplementations(results, finalEvaluation);
+      await this.deployImplementations(results, finalEvaluation, testResults);
       
       // Step 7: Host discussion interface
-      await this.hostDiscussionInterface(finalEvaluation);
+      await this.hostDiscussionInterface(finalEvaluation, testResults);
       
-      return this.formatFinalResults(finalEvaluation);
+      return this.formatFinalResults(finalEvaluation, testResults);
       
     } catch (error) {
       logger.error('❌ Assessment process failed:', error);
@@ -1331,8 +1276,8 @@ The competitive LLM coding session has completed successfully!
     logger.info('🧪 Starting comprehensive test validation system...');
     
     try {
-      // Import the test validation system (TODO: implement when test-runner is available)
-      // const { executeGruntsValidation } = await import('../../../.zenode/tools/zn-grunts/test-runner/main.js');
+      // Import the test validation system
+      const { executeGruntsValidation } = await import('../../../.zenode/tools/zn-grunts/test-runner/main.js');
       
       // Get worker IDs from results
       const workerIds = Object.keys(results.containers || {}).map(key => key.replace('worker', ''));
@@ -1344,9 +1289,8 @@ The competitive LLM coding session has completed successfully!
       
       logger.info(`🔍 Running validation for workers: ${workerIds.join(', ')}`);
       
-      // Execute comprehensive validation (TODO: implement when test-runner is available)
-      // const validationResults = await executeGruntsValidation(workerIds);
-      const validationResults = new Map(); // Fallback for now
+      // Execute comprehensive validation
+      const validationResults = await executeGruntsValidation(workerIds);
       
       logger.info(`✅ Comprehensive validation completed for ${validationResults.size} workers`);
       
@@ -1360,6 +1304,61 @@ The competitive LLM coding session has completed successfully!
     }
   }
 
+  /**
+   * Deploy Docker containers using docker-compose
+   */
+  private async deployContainers(): Promise<void> {
+    const workspacePath = join(process.cwd(), this.gruntsWorkspace);
+    const dockerComposePath = join(workspacePath, 'docker-compose.yml');
+    
+    logger.info('🐳 Starting Docker container deployment...');
+    
+    try {
+      // Check if docker-compose file exists
+      await fs.access(dockerComposePath);
+      
+      // Deploy containers
+      const { spawn } = await import('child_process');
+      const deployProcess = spawn('docker-compose', ['up', '-d', '--build'], {
+        cwd: workspacePath,
+        stdio: 'pipe'
+      });
+      
+      return new Promise((resolve, reject) => {
+        let output = '';
+        
+        deployProcess.stdout?.on('data', (data) => {
+          output += data.toString();
+          logger.debug(`Docker deploy: ${data.toString().trim()}`);
+        });
+        
+        deployProcess.stderr?.on('data', (data) => {
+          output += data.toString();
+          logger.debug(`Docker deploy error: ${data.toString().trim()}`);
+        });
+        
+        deployProcess.on('close', (code) => {
+          if (code === 0) {
+            logger.info('✅ Docker containers deployed successfully');
+            resolve();
+          } else {
+            logger.error(`❌ Docker deployment failed with code ${code}`);
+            logger.error(`Output: ${output}`);
+            reject(new Error(`Docker deployment failed: ${output}`));
+          }
+        });
+        
+        deployProcess.on('error', (error) => {
+          logger.error('❌ Docker deployment process error:', error);
+          reject(error);
+        });
+      });
+      
+    } catch (error) {
+      logger.error('❌ Docker compose file not found or deployment failed:', error);
+      throw new Error(`Container deployment failed: ${error.message}`);
+    }
+  }
 
   /**
    * Wait for containers to be ready
@@ -1406,7 +1405,7 @@ The competitive LLM coding session has completed successfully!
         logger.debug(`Found ${gruntsContainers.length} containers, waiting...`);
         
       } catch (error) {
-        logger.debug(`Container check failed: ${error instanceof Error ? error.message : String(error)}`);
+        logger.debug(`Container check failed: ${error.message}`);
       }
       
       attempts++;
@@ -1509,12 +1508,9 @@ The competitive LLM coding session has completed successfully!
         const workerPort = 3030 + parseInt(workerId);
         
         try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000);
-          const response = await fetch(`http://localhost:${workerPort}/health`, { signal: controller.signal });
-          clearTimeout(timeoutId);
+          const response = await fetch(`http://localhost:${workerPort}/health`, { timeout: 5000 });
           if (response.ok) {
-            const healthData = await response.json() as any;
+            const healthData = await response.json();
             const worker = healthData.worker;
             
             results.containers[workerId] = {

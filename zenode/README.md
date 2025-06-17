@@ -113,6 +113,28 @@ At least one of the following API configurations is required:
 - OpenRouter API key
 - Custom API endpoint (for local models like Ollama)
 
+### Platform Support
+
+**Currently Tested and Supported:**
+- ✅ **Apple Silicon Macs (M1/M2/M3)** - Native ARM64 support, recommended platform
+- ⚠️ **macOS Intel** - Works with platform override configuration
+- ⚠️ **Linux x86_64** - Requires platform configuration adjustments
+- ❌ **Windows** - Limited support, requires WSL2 setup
+
+**Special Requirements for ZN-Grunts Tool:**
+- **Apple Silicon Setup** (for distributed LLM orchestration):
+  ```bash
+  # Install Ollama for local model support
+  curl https://ollama.ai/install.sh | sh
+  
+  # Pull ARM64 optimized models
+  ollama pull llama3.2:1b
+  ollama pull phi3:mini
+  ```
+- **Docker Desktop 4.0+** with ARM64 container support
+- **16GB+ RAM** (32GB recommended for advanced features)
+- **Ports 3030-4000** available for distributed workers
+
 ## Installation
 
 ### Option 1: Docker (Recommended + you can ask Claude to do this for you!)

@@ -39,7 +39,8 @@
     "dist",
     "tests",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "src/tools/grunts-infrastructure/**/*"
   ],
   "ts-node": {
     "esm": true,

@@ -180,13 +180,15 @@ describe('GruntsTool', () => {
     });
 
     it('should handle verification errors gracefully', async () => {
-      // Mock the checkModelAvailability method to return false for error cases
-      const mockCheck = vi.fn().mockResolvedValue(false);
-      (gruntsTool as any).checkModelAvailability = mockCheck;
+      // Mock an error in the verification process
+      const originalCheck = (gruntsTool as any).checkModelAvailability;
+      (gruntsTool as any).checkModelAvailability = vi.fn().mockRejectedValue(new Error('Network error'));
       
       const isAvailable = await (gruntsTool as any).checkModelAvailability('phi3:mini');
       expect(isAvailable).toBe(false);
-      expect(mockCheck).toHaveBeenCalledWith('phi3:mini');
+      
+      // Restore original method
+      (gruntsTool as any).checkModelAvailability = originalCheck;
     });
   });
 
@@ -236,7 +238,7 @@ describe('GruntsTool', () => {
       expect(mkdirCalls.length).toBeGreaterThan(0);
       
       // Should create workspace structure
-      const createdPaths = mkdirCalls.map(call => String(call[0]));
+      const createdPaths = mkdirCalls.map(call => call[0]);
       expect(createdPaths.some(path => path.includes('workspace'))).toBe(true);
       expect(createdPaths.some(path => path.includes('results'))).toBe(true);
     });
@@ -293,7 +295,7 @@ describe('GruntsTool', () => {
   });
 
   describe('Integration Tests', () => {
-    it.skip('should execute successfully with minimal valid input', async () => {
+    it('should execute successfully with minimal valid input', async () => {
       // Mock all file system operations
       vi.mocked(fs.mkdir).mockResolvedValue(undefined);
       vi.mocked(fs.writeFile).mockResolvedValue(undefined);

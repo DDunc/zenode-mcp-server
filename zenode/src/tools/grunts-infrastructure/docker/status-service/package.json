@@ -1,0 +1,23 @@
+{
+  "name": "grunts-status-service",
+  "version": "1.0.0",
+  "description": "Real-time monitoring dashboard for Grunts distributed LLM orchestration",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "build": "echo 'No build step required for this service'"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2",
+    "dockerode": "^4.0.0",
+    "cors": "^2.8.5"
+  },
+  "keywords": ["llm", "monitoring", "dashboard", "docker", "grunts"],
+  "author": "Zenode",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

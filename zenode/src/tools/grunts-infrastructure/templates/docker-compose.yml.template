@@ -1,0 +1,86 @@
+# Grunts Docker Compose Template
+# This template is dynamically populated based on the selected tier
+version: '3.8'
+
+services:
+  # Status monitoring service
+  grunts-status:
+    build:
+      context: ./docker/status-service
+      platform: linux/arm64
+    ports:
+      - "3030:3000"
+    volumes:
+      - ./workspace:/workspace:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - MAX_EXECUTION_TIME={{MAX_EXECUTION_TIME}}
+      - NODE_ENV=production
+    networks:
+      - grunts-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Test execution environment
+  test-runner:
+    build:
+      context: ./docker/test-runner
+      platform: linux/arm64
+    volumes:
+      - ./workspace:/workspace
+      - ./results:/results
+    environment:
+      - NODE_ENV=test
+      - ENABLE_CPP_BRIDGE=true
+    networks:
+      - grunts-network
+    depends_on:
+      - grunts-status
+
+  {{#containers}}
+  # LLM Container: {{name}}
+  {{name}}:
+    image: ollama/ollama:latest
+    platform: linux/arm64
+    environment:
+      - MODEL={{model}}
+      - TASK_ID={{taskId}}
+      - WORKER_ID={{workerId}}
+      - SPECIALIZATION={{specialization}}
+      - MAX_PARTIAL_ASSESSMENTS=10
+      - OLLAMA_HOST=0.0.0.0
+    volumes:
+      - ./workspace/{{taskId}}/{{workerId}}:/workspace
+      - grunts-models:/root/.ollama
+    deploy:
+      resources:
+        limits:
+          memory: {{memory}}
+        reservations:
+          memory: {{memoryReservation}}
+    networks:
+      - grunts-network
+    depends_on:
+      - grunts-status
+    restart: unless-stopped
+    command: >
+      sh -c "
+        ollama serve &
+        sleep 10 &&
+        ollama pull {{model}} &&
+        node /workspace/grunt-worker.js
+      "
+
+  {{/containers}}
+
+networks:
+  grunts-network:
+    driver: bridge
+
+volumes:
+  grunts-models:
+    driver: local
