@@ -36,7 +36,12 @@ import {
   addTurn,
   getConversationStats,
 } from '../utils/conversation-memory.js';
-import { readFile, translatePathForEnvironment } from '../utils/file-utils.js';
+import { 
+  readFile, 
+  translatePathForEnvironment, 
+  estimateFileTokens, 
+  checkTotalFileSize 
+} from '../utils/file-utils.js';
 
 /**
  * Base request schema with common fields
@@ -236,7 +241,11 @@ export abstract class BaseTool {
   }
 
   /**
-   * Handle conversation threading
+   * Handle conversation threading with file tracking
+   * 
+   * This method now captures the files used during tool execution and stores them
+   * in conversation turns to enable the newest-first file prioritization and 
+   * token-aware file management features.
    */
   protected async handleConversationThreading(
     toolName: string,
@@ -246,6 +255,8 @@ export abstract class BaseTool {
     inputTokens: number,
     outputTokens: number,
     continuationId?: string,
+    userFiles?: string[], // Files provided by user in this turn
+    processedFiles?: string[], // Files actually processed by the tool
   ): Promise<ContinuationOffer | null> {
     try {
       let threadId: string;
@@ -253,13 +264,31 @@ export abstract class BaseTool {
       if (continuationId) {
         // Continue existing thread
         threadId = continuationId;
-        await addTurn(threadId, 'user', userPrompt, { inputTokens, tool: toolName });
-        await addTurn(threadId, 'assistant', assistantResponse, { modelName: modelUsed, outputTokens, tool: toolName });
+        await addTurn(threadId, 'user', userPrompt, { 
+          inputTokens, 
+          tool: toolName, 
+          files: userFiles, // Track files provided by user
+        });
+        await addTurn(threadId, 'assistant', assistantResponse, { 
+          modelName: modelUsed, 
+          outputTokens, 
+          tool: toolName,
+          files: processedFiles, // Track files actually processed by tool
+        });
       } else {
         // Create new thread
         threadId = await createThread(toolName, modelUsed);
-        await addTurn(threadId, 'user', userPrompt, { inputTokens, tool: toolName });
-        await addTurn(threadId, 'assistant', assistantResponse, { modelName: modelUsed, outputTokens, tool: toolName });
+        await addTurn(threadId, 'user', userPrompt, { 
+          inputTokens, 
+          tool: toolName, 
+          files: userFiles, // Track files provided by user
+        });
+        await addTurn(threadId, 'assistant', assistantResponse, { 
+          modelName: modelUsed, 
+          outputTokens, 
+          tool: toolName,
+          files: processedFiles, // Track files actually processed by tool
+        });
       }
 
       // Get conversation stats
@@ -435,5 +464,41 @@ export abstract class BaseTool {
     } else {
       return `Model to use. Default: ${DEFAULT_MODEL}`;
     }
+  }
+
+  /**
+   * Estimate tokens for a file using file-type aware ratios.
+   *
+   * @param filePath Path to the file
+   * @returns Estimated token count
+   */
+  protected async estimateTokensSmart(filePath: string): Promise<number> {
+    return await estimateFileTokens(filePath);
+  }
+
+  /**
+   * Check if total file sizes would exceed token threshold before embedding.
+   *
+   * IMPORTANT: This performs STRICT REJECTION at MCP boundary.
+   * No partial inclusion - either all files fit or request is rejected.
+   * This forces Claude to make better file selection decisions.
+   *
+   * @param files List of file paths to check
+   * @param modelName Current model name for context-aware thresholds
+   * @returns MCP_CODE_TOO_LARGE response if too large, null if acceptable
+   */
+  protected async checkTotalFileSize(
+    files: string[],
+    modelName?: string,
+  ): Promise<{ status: 'MCP_CODE_TOO_LARGE'; content: string; content_type: 'text' } | null> {
+    if (!files || files.length === 0) {
+      return null;
+    }
+
+    // Use the current model or fallback to default
+    const currentModel = modelName || DEFAULT_MODEL;
+
+    // Use centralized file size checking with model context
+    return await checkTotalFileSize(files, currentModel);
   }
 }

@@ -48,6 +48,7 @@ import { TestGenTool } from './tools/testgen.js';
 import { GopherTool } from './tools/gopher.js';
 import { GruntsTool } from './tools/grunts.js';
 import { ConfigTool } from './tools/config.js';
+import { BootstrapTool } from './tools/bootstrap.js';
 
 // Create the MCP server instance with a unique name identifier
 // This name is used by MCP clients to identify and connect to this specific server
@@ -77,6 +78,7 @@ const TOOLS: Record<string, BaseTool> = {
   gopher: new GopherTool(), // Local file system access bridge
   grunts: new GruntsTool(), // Distributed LLM orchestration system
   config: new ConfigTool(), // Interactive CLI configuration tool
+  bootstrap: new BootstrapTool(), // First-time setup and project configuration
 };
 
 // Initialize middleware pipeline
@@ -250,6 +252,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   // Log to activity file for monitoring
   mcpActivityLogger.info(`TOOL_CALL: ${name} with ${Object.keys(args || {}).length} arguments`);
 
+  // Check for :z coordination shorthand
+  const shortcuts = configLoader.getShortcutsConfig();
+  const isCoordinationRequest = args?.prompt && 
+    typeof args.prompt === 'string' && 
+    args.prompt.startsWith(shortcuts.coordinationPrefix);
+
+  if (isCoordinationRequest && name !== 'chat') {
+    // Redirect :z requests to chat tool for coordination
+    logger.info(`Redirecting :z coordination request to chat tool`);
+    return await executeCoordinatedRequest(args);
+  }
+
   // Create middleware context for this request
   const context: ToolContext = {
     toolName: name,
@@ -314,6 +328,126 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     );
   }
 });
+
+/**
+ * Detect if specific tool names are mentioned in the prompt
+ */
+function detectMentionedTools(prompt: string): string[] {
+  const availableTools = Object.keys(TOOLS);
+  const mentionedTools: string[] = [];
+  
+  const lowerPrompt = prompt.toLowerCase();
+  for (const tool of availableTools) {
+    if (lowerPrompt.includes(tool.toLowerCase())) {
+      mentionedTools.push(tool);
+    }
+  }
+  
+  return mentionedTools;
+}
+
+/**
+ * Execute coordinated request using multiple tools
+ */
+async function executeCoordinatedRequest(args: any): Promise<{ content: TextContent[] }> {
+  const shortcuts = configLoader.getShortcutsConfig();
+  const originalPrompt = args.prompt as string;
+  
+  // Remove the :z prefix from the prompt
+  const cleanPrompt = originalPrompt.substring(shortcuts.coordinationPrefix.length).trim();
+  
+  // Detect if specific tools are mentioned
+  const mentionedTools = detectMentionedTools(cleanPrompt);
+  const hasSpecificTools = mentionedTools.length > 0;
+  
+  logger.info(`Executing :z coordination for: "${cleanPrompt}"`);
+  logger.info(`Mentioned tools: ${mentionedTools.join(', ') || 'none'}`);
+  
+  // Determine coordination strategy
+  let toolsToUse: string[];
+  if (hasSpecificTools) {
+    // Use mentioned tools plus chat for coordination
+    toolsToUse = ['chat', ...mentionedTools].filter((tool, index, arr) => arr.indexOf(tool) === index);
+    mcpActivityLogger.info(`COORDINATION_START: specific tools - ${toolsToUse.join(', ')}`);
+  } else {
+    // No specific tools mentioned - prioritize thinkdeep and analyze
+    toolsToUse = ['chat', 'thinkdeep', 'analyze'];
+    mcpActivityLogger.info(`COORDINATION_START: default enhanced - ${toolsToUse.join(', ')}`);
+  }
+  
+  const results: string[] = [];
+  const toolsUsed: string[] = [];
+  let conversationId: string | undefined = args.continuation_id;
+  
+  try {
+    // Execute tools in sequence
+    for (const toolName of toolsToUse) {
+      if (TOOLS[toolName]) {
+        logger.info(`Executing ${toolName} tool`);
+        
+        let toolPrompt = cleanPrompt;
+        
+        // For thinkdeep and analyze when no specific tools mentioned, add question generation instruction
+        if (!hasSpecificTools && (toolName === 'thinkdeep' || toolName === 'analyze')) {
+          toolPrompt += `\n\nAdditionally, please generate at least 2 probing questions based on your analysis to help explore this topic deeper.`;
+        }
+        
+        const toolArgs = { 
+          ...args, 
+          prompt: toolPrompt,
+          continuation_id: conversationId 
+        };
+        
+        const tool = TOOLS[toolName];
+        const result = await tool.execute(toolArgs);
+        
+        // Map tool names to emojis
+        const emoji = toolName === 'chat' ? '💬' :
+                      toolName === 'analyze' ? '🔍' : 
+                      toolName === 'thinkdeep' ? '🧠' : 
+                      toolName === 'debug' ? '🐛' : 
+                      toolName === 'codereview' ? '👀' :
+                      toolName === 'precommit' ? '🔒' :
+                      toolName === 'testgen' ? '🧪' : '🔧';
+        
+        results.push(`## ${emoji} **${toolName.toUpperCase()}**\n${result.content}`);
+        toolsUsed.push(toolName);
+        
+        // Update conversation ID for next tool
+        if (result.continuation_offer?.thread_id) {
+          conversationId = result.continuation_offer.thread_id;
+        }
+      }
+    }
+    
+    mcpActivityLogger.info(`COORDINATION_COMPLETE: ${toolsUsed.length} tools executed`);
+    
+    // Combine all results
+    const strategy = hasSpecificTools ? 'specific tools detected' : 'enhanced default (thinkdeep + analyze focus)';
+    const combinedContent = `# 🤖 **Zenode Coordination Results**\n\n` +
+      `*Strategy: ${strategy} | Tools used: ${toolsUsed.join(', ')}*\n\n` +
+      results.join('\n\n---\n\n') + 
+      (conversationId ? `\n\n**Thread ID:** ${conversationId}` : '');
+    
+    return {
+      content: [{
+        type: 'text',
+        text: combinedContent
+      }]
+    };
+    
+  } catch (error) {
+    logger.error('Coordination error:', error);
+    mcpActivityLogger.info(`COORDINATION_ERROR: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    
+    return {
+      content: [{
+        type: 'text',
+        text: `❌ **Coordination Error**\n\nFailed to execute coordinated request: ${error instanceof Error ? error.message : 'Unknown error'}\n\nTools attempted: ${toolsUsed.join(', ')}`
+      }]
+    };
+  }
+}
 
 /**
  * Format tool output for MCP response

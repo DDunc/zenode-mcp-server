@@ -21,8 +21,8 @@ const config: ZenodeConfig = {
   
   shortcuts: {
     // The prefix that enables tool coordination
-    // "z: analyze this file" will coordinate with analyze tool
-    coordinationPrefix: 'z:',
+    // ":z analyze this file" will coordinate with analyze tool
+    coordinationPrefix: ':z',
     
     // Full tool invocation prefix (for future use)
     toolInvocation: 'zenode:',

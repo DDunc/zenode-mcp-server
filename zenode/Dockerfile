@@ -43,6 +43,7 @@ COPY --from=builder /app/conf ./conf
 # Copy configuration files if they exist
 COPY --from=builder /app/zenode-config.json* ./
 COPY --from=builder /app/zenode.config.* ./
+COPY --from=builder /app/bootstrap-config.json ./
 
 # Create non-root user
 RUN addgroup -g 1001 -S zenode && \

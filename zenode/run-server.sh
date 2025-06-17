@@ -116,6 +116,33 @@ if [ -z "$MCP_WORKSPACE" ]; then
     echo -e "${BLUE}ℹ️  MCP_WORKSPACE not set. Using home directory: $MCP_WORKSPACE${NC}"
 fi
 
+# Auto-detect project directory for mounting
+detect_project_root() {
+    local current_dir="$PWD"
+    local indicators=(".git" "package.json" "Cargo.toml" "pyproject.toml" "go.mod" ".project")
+    
+    while [ "$current_dir" != "/" ]; do
+        for indicator in "${indicators[@]}"; do
+            if [ -e "$current_dir/$indicator" ]; then
+                echo "$current_dir"
+                return 0
+            fi
+        done
+        current_dir=$(dirname "$current_dir")
+    done
+    return 1
+}
+
+PROJECT_ROOT=$(detect_project_root)
+if [ -n "$PROJECT_ROOT" ] && [ "$PROJECT_ROOT" != "$PWD" ]; then
+    echo -e "${GREEN}📁 Project detected: $PROJECT_ROOT${NC}"
+    echo -e "${BLUE}ℹ️  Project will be mounted at /project inside container${NC}"
+    export MCP_PROJECT_ROOT="$PROJECT_ROOT"
+    export MCP_PROJECT_MOUNTED="true"
+else
+    echo -e "${BLUE}ℹ️  No project root detected or already in project directory${NC}"
+fi
+
 echo ""
 
 # Build and start services

@@ -10,13 +10,14 @@ import { REDIS_URL } from '../config.js';
 import { logger } from './logger.js';
 import { ConversationThread, ConversationTurn, ConversationStats } from '../types/tools.js';
 import { ModelContext } from './model-context.js';
+import { estimateFileTokens, readFileContent } from './file-utils.js';
 
 // Redis client instance
 let redisClient: RedisClientType | null = null;
 
 // Constants
 export const MAX_CONVERSATION_TURNS = 20;
-const CONVERSATION_TTL = 86400; // 24 hours in seconds
+const CONVERSATION_TTL = 10800; // 3 hours in seconds (increased from 24h for better performance)
 const KEY_PREFIX = 'zenode:conversation:';
 
 /**
@@ -179,7 +180,25 @@ export async function getConversationStats(threadId: string): Promise<Conversati
 }
 
 /**
- * Build conversation history with token-aware truncation
+ * Build formatted conversation history for tool prompts with embedded file contents.
+ *
+ * Creates a comprehensive conversation history that includes both conversation turns and
+ * file contents, with intelligent prioritization to maximize relevant context within
+ * token limits. This function enables stateless tools to access complete conversation
+ * context from previous interactions, including cross-tool continuations.
+ *
+ * FILE PRIORITIZATION BEHAVIOR:
+ * Files from newer conversation turns are prioritized over files from older turns.
+ * When the same file appears in multiple turns, the reference from the NEWEST turn
+ * takes precedence. This ensures the most recent file context is preserved when
+ * token limits require file exclusions.
+ *
+ * TOKEN MANAGEMENT:
+ * - Uses model-specific token allocation (file_tokens + history_tokens)
+ * - Files are embedded ONCE at the start to prevent duplication
+ * - Conversation turns are processed newest-first but presented chronologically
+ * - Stops adding turns when token budget would be exceeded
+ * - Gracefully handles token limits with informative notes
  */
 export async function buildConversationHistory(
   thread: ConversationThread,
@@ -191,13 +210,96 @@ export async function buildConversationHistory(
 
   const allocation = await modelContext.calculateTokenAllocation();
   const maxHistoryTokens = allocation.historyTokens;
+  const maxFileTokens = allocation.fileTokens || Math.floor(allocation.contentTokens * 0.7); // 70% for files
 
   logger.debug(`[CONVERSATION_DEBUG] Max history tokens: ${maxHistoryTokens.toLocaleString()}`);
+  logger.debug(`[CONVERSATION_DEBUG] Max file tokens: ${maxFileTokens.toLocaleString()}`);
 
   const historyParts: string[] = [];
   
   // Add conversation header
-  historyParts.push('=== CONVERSATION HISTORY ===');
+  historyParts.push('=== CONVERSATION HISTORY (CONTINUATION) ===');
+  historyParts.push(`Thread: ${thread.id}`);
+  historyParts.push(`Tool: ${thread.tool_name}`);
+  historyParts.push(`Turn ${thread.turns.length}/${MAX_CONVERSATION_TURNS}`);
+  historyParts.push('You are continuing this conversation thread from where it left off.');
+  historyParts.push('');
+
+  // Get all files referenced in this conversation with newest-first prioritization
+  const allFiles = getConversationFileList(thread);
+  
+  // Embed files referenced in this conversation with size-aware selection
+  if (allFiles.length > 0) {
+    logger.debug(`[FILES] Starting embedding for ${allFiles.length} files`);
+
+    // Plan file inclusion based on size constraints
+    // CRITICAL: allFiles is already ordered by newest-first prioritization from getConversationFileList()
+    // So when planFileInclusionBySize() hits token limits, it naturally excludes OLDER files first
+    // while preserving the most recent file references - exactly what we want!
+    const { filesToInclude, filesToSkip, estimatedTotalTokens } = await planFileInclusionBySize(allFiles, maxFileTokens);
+
+    if (filesToSkip.length > 0) {
+      logger.info(`[FILES] Skipping ${filesToSkip.length} files due to size constraints: ${filesToSkip.join(', ')}`);
+    }
+
+    if (filesToInclude.length > 0) {
+      historyParts.push('=== FILES REFERENCED IN THIS CONVERSATION ===');
+      historyParts.push('The following files have been shared and analyzed during our conversation.');
+      if (filesToSkip.length > 0) {
+        historyParts.push(`[NOTE: ${filesToSkip.length} files omitted due to size constraints]`);
+      }
+      historyParts.push('Refer to these when analyzing the context and requests below:');
+      historyParts.push('');
+
+      // Process files for embedding
+      let actualFileTokens = 0;
+      let filesIncluded = 0;
+
+      for (const filePath of filesToInclude) {
+        try {
+          logger.debug(`[FILES] Processing file ${filePath}`);
+          const { content: formattedContent, tokens: contentTokens } = await readFileContent(filePath);
+          if (formattedContent) {
+            historyParts.push(formattedContent);
+            actualFileTokens += contentTokens;
+            filesIncluded++;
+            logger.debug(
+              `File embedded in conversation history: ${filePath} (${contentTokens.toLocaleString()} tokens)`,
+            );
+          } else {
+            logger.debug(`File skipped (empty content): ${filePath}`);
+          }
+        } catch (error) {
+          logger.warn(
+            `Failed to embed file in conversation history: ${filePath} - ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+          continue;
+        }
+      }
+
+      if (filesIncluded > 0) {
+        if (filesToSkip.length > 0) {
+          historyParts.push('');
+          historyParts.push(
+            `[NOTE: ${filesToSkip.length} additional file(s) were omitted due to size constraints. ` +
+            'These were older files from earlier conversation turns.]',
+          );
+        }
+        logger.debug(
+          `Conversation history file embedding complete: ${filesIncluded} files embedded, ${filesToSkip.length} omitted, ${actualFileTokens.toLocaleString()} total tokens`,
+        );
+      } else {
+        historyParts.push('(No accessible files found)');
+        logger.debug(`[FILES] No accessible files found from ${filesToInclude.length} planned files`);
+      }
+
+      historyParts.push('');
+      historyParts.push('=== END REFERENCED FILES ===');
+      historyParts.push('');
+    }
+  }
+
+  historyParts.push('Previous conversation turns:');
   historyParts.push('');
 
   // Process turns in reverse order (most recent first) to prioritize recent context
@@ -377,21 +479,121 @@ export async function reconstructThreadContext(
 }
 
 /**
- * Get a list of files mentioned in the conversation
+ * Extract all unique files from conversation turns with newest-first prioritization.
+ *
+ * This function implements the core file prioritization logic used throughout the
+ * conversation memory system. It walks backwards through conversation turns
+ * (from newest to oldest) and collects unique file references, ensuring that
+ * when the same file appears in multiple turns, the reference from the NEWEST
+ * turn takes precedence.
+ *
+ * PRIORITIZATION ALGORITHM:
+ * 1. Iterate through turns in REVERSE order (index len-1 down to 0)
+ * 2. For each turn, process files in the order they appear in turn.files
+ * 3. Add file to result list only if not already seen (newest reference wins)
+ * 4. Skip duplicate files that were already added from newer turns
+ *
+ * This ensures that:
+ * - Files from newer conversation turns appear first in the result
+ * - When the same file is referenced multiple times, only the newest reference is kept
+ * - The order reflects the most recent conversation context
+ *
+ * Example:
+ *   Turn 1: files = ["main.py", "utils.py"]
+ *   Turn 2: files = ["test.py"]
+ *   Turn 3: files = ["main.py", "config.py"]  // main.py appears again
+ *
+ *   Result: ["main.py", "config.py", "test.py", "utils.py"]
+ *   (main.py from Turn 3 takes precedence over Turn 1)
  */
 export function getConversationFileList(thread: ConversationThread): string[] {
-  const files = new Set<string>();
-  
-  // Extract file paths from conversation
-  // This is a simplified implementation - could be enhanced with better parsing
-  thread.turns.forEach((turn) => {
-    const fileMatches = turn.content.match(/[\/\\][\w\-\/\\]+\.\w+/g);
-    if (fileMatches) {
-      fileMatches.forEach((file) => files.add(file));
-    }
-  });
+  if (!thread.turns || thread.turns.length === 0) {
+    logger.debug('[FILES] No turns found, returning empty file list');
+    return [];
+  }
 
-  return Array.from(files);
+  // Collect files by walking backwards (newest to oldest turns)
+  const seenFiles = new Set<string>();
+  const fileList: string[] = [];
+
+  logger.debug(`[FILES] Collecting files from ${thread.turns.length} turns (newest first)`);
+
+  // Process turns in reverse order (newest first) - this is the CORE of newest-first prioritization
+  // By iterating from len-1 down to 0, we encounter newer turns before older turns
+  // When we find a duplicate file, we skip it because the newer version is already in our list
+  for (let i = thread.turns.length - 1; i >= 0; i--) {
+    const turn = thread.turns[i];
+    if (turn && turn.files && turn.files.length > 0) {
+      logger.debug(`[FILES] Turn ${i + 1} has ${turn.files.length} files: ${turn.files.join(', ')}`);
+      for (const filePath of turn.files) {
+        if (!seenFiles.has(filePath)) {
+          // First time seeing this file - add it (this is the NEWEST reference)
+          seenFiles.add(filePath);
+          fileList.push(filePath);
+          logger.debug(`[FILES] Added new file: ${filePath} (from turn ${i + 1})`);
+        } else {
+          // File already seen from a NEWER turn - skip this older reference
+          logger.debug(`[FILES] Skipping duplicate file: ${filePath} (newer version already included)`);
+        }
+      }
+    }
+  }
+
+  logger.debug(`[FILES] Final file list (${fileList.length}): ${fileList.join(', ')}`);
+  return fileList;
+}
+
+/**
+ * Plan which files to include based on size constraints.
+ *
+ * This is ONLY used for conversation history building, not MCP boundary checks.
+ *
+ * @param allFiles List of files to consider for inclusion
+ * @param maxFileTokens Maximum tokens available for file content
+ * @returns Tuple of (files_to_include, files_to_skip, estimated_total_tokens)
+ */
+export async function planFileInclusionBySize(
+  allFiles: string[],
+  maxFileTokens: number,
+): Promise<{ filesToInclude: string[]; filesToSkip: string[]; estimatedTotalTokens: number }> {
+  if (!allFiles || allFiles.length === 0) {
+    return { filesToInclude: [], filesToSkip: [], estimatedTotalTokens: 0 };
+  }
+
+  const filesToInclude: string[] = [];
+  const filesToSkip: string[] = [];
+  let totalTokens = 0;
+
+  logger.debug(
+    `[FILES] Planning inclusion for ${allFiles.length} files with budget ${maxFileTokens.toLocaleString()} tokens`,
+  );
+
+  for (const filePath of allFiles) {
+    try {
+      const estimatedTokens = await estimateFileTokens(filePath);
+
+      if (totalTokens + estimatedTokens <= maxFileTokens) {
+        filesToInclude.push(filePath);
+        totalTokens += estimatedTokens;
+        logger.debug(
+          `[FILES] Including ${filePath} - ${estimatedTokens.toLocaleString()} tokens (total: ${totalTokens.toLocaleString()})`,
+        );
+      } else {
+        filesToSkip.push(filePath);
+        logger.debug(
+          `[FILES] Skipping ${filePath} - would exceed budget (needs ${estimatedTokens.toLocaleString()} tokens)`,
+        );
+      }
+    } catch (error) {
+      filesToSkip.push(filePath);
+      logger.debug(`[FILES] Skipping ${filePath} - error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  logger.debug(
+    `[FILES] Inclusion plan: ${filesToInclude.length} include, ${filesToSkip.length} skip, ${totalTokens.toLocaleString()} tokens`,
+  );
+  return { filesToInclude, filesToSkip, estimatedTotalTokens: totalTokens };
 }
 
 /**

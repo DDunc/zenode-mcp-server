@@ -9,6 +9,7 @@ import { BaseToolRequestSchema } from '../utils/schema-helpers.js';
 import { modelProviderRegistry } from '../providers/registry.js';
 import { TEMPERATURE_BALANCED } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { shouldShowBootstrapGuidance, getBootstrapWelcome } from '../utils/auto-bootstrap.js';
 
 /**
  * Chat tool request schema
@@ -26,7 +27,7 @@ export class ChatTool extends BaseTool {
   description = 
     'GENERAL CHAT & COLLABORATIVE THINKING - AI thinking partner for development discussions. ' +
     'IMPORTANT: This tool MUST be used when explicitly invoked (e.g., "zenode:chat [your question]"). ' +
-    'SPECIAL SHORTHAND: If a message starts with "z:" it calls zenode:chat to coordinate with 3 other zenode tools (4 total). ' +
+    'SPECIAL SHORTHAND: If a message starts with ":z" it calls zenode:chat to coordinate with 3 other zenode tools (4 total). ' +
     'When coordinating, if unsure which tools to involve, default to: analyze, thinkdeep, and debug. ' +
     'Use this when you need to ask questions, brainstorm ideas, get opinions, discuss topics, ' +
     'share your thinking, or need explanations about concepts and approaches. ' +
@@ -66,6 +67,46 @@ Remember: You're a thinking partner, not just an answer machine. Engage with the
       const validated = ChatRequestSchema.parse(args);
       
       logger.info(`Chat tool invoked with prompt length: ${validated.prompt.length}`);
+      
+      // Check if this might be a first-time user who needs bootstrap guidance
+      const bootstrapCheck = shouldShowBootstrapGuidance();
+      if (bootstrapCheck.show) {
+        logger.info(`First-time user detected: ${bootstrapCheck.reason} - Auto-triggering setup`);
+        
+        // Auto-trigger bootstrap setup for first-time users
+        try {
+          const { BootstrapTool } = await import('./bootstrap.js');
+          const bootstrapTool = new BootstrapTool();
+          
+          const bootstrapResult = await bootstrapTool.execute({ 
+            action: 'auto-setup', 
+            skip_prompts: true,
+            auto_restart: true 
+          });
+          
+          // After bootstrap, continue with the original chat request
+          if (bootstrapResult.status === 'success') {
+            logger.info('Bootstrap completed successfully, continuing with chat');
+            // Continue with the chat execution below (don't return here)
+          } else {
+            // Bootstrap failed, show error and manual instructions
+            return this.formatOutput(`❌ **Auto-setup encountered an issue:**
+
+${bootstrapResult.content}
+
+**Your original question:** "${validated.prompt}"
+
+**Manual setup:** Try running \`:z bootstrap auto-setup\` manually`, 'error');
+          }
+        } catch (error) {
+          logger.error('Bootstrap auto-setup error:', error);
+          const welcome = getBootstrapWelcome();
+          return this.formatOutput(
+            `${welcome}\n\n**Your Question:** "${validated.prompt}"\n\n*Auto-setup failed. Please run the bootstrap command manually.*`,
+            'error'
+          );
+        }
+      }
       
       // Check prompt size
       this.checkPromptSize(validated.prompt);
@@ -119,7 +160,7 @@ Remember: You're a thinking partner, not just an answer machine. Engage with the
       logger.info(`Generating chat response with model: ${selectedModel}`);
       const response = await provider.generateResponse(modelRequest);
       
-      // Handle conversation threading
+      // Handle conversation threading with file tracking
       const continuationOffer = await this.handleConversationThreading(
         this.name,
         validated.prompt,
@@ -128,6 +169,8 @@ Remember: You're a thinking partner, not just an answer machine. Engage with the
         response.usage.inputTokens,
         response.usage.outputTokens,
         validated.continuation_id,
+        validated.files, // Track files provided by user
+        validated.files, // Same files were processed by tool
       );
       
       // Format output
