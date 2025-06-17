@@ -260,3 +260,185 @@ export function formatFileSize(bytes: number): string {
   
   return `${size.toFixed(2)} ${units[unitIndex]}`;
 }
+
+/**
+ * Estimate tokens for a file using file-type aware ratios.
+ * 
+ * This uses sophisticated heuristics based on file type to provide accurate
+ * token estimates without actually tokenizing the content.
+ */
+export async function estimateFileTokens(filePath: string): Promise<number> {
+  try {
+    const translatedPath = translatePathForEnvironment(filePath);
+    const stats = await getFileStats(filePath);
+    const sizeInBytes = stats.size;
+    
+    // Get file extension for type-specific estimation
+    const ext = getFileExtension(filePath).toLowerCase();
+    
+    // Type-specific token ratios (characters per token)
+    let charsPerToken = 4; // Default for general text
+    
+    // Code files tend to be more token-dense due to syntax
+    const codeExtensions = ['.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.c', '.cpp', '.go', '.rs', '.rb', '.php'];
+    if (codeExtensions.includes(ext)) {
+      charsPerToken = 3.5; // Code is more token-dense
+    }
+    
+    // JSON and structured data
+    const dataExtensions = ['.json', '.yaml', '.yml', '.xml', '.csv'];
+    if (dataExtensions.includes(ext)) {
+      charsPerToken = 4.5; // Structured data is less token-dense
+    }
+    
+    // Documentation and markdown
+    const docExtensions = ['.md', '.txt', '.rst'];
+    if (docExtensions.includes(ext)) {
+      charsPerToken = 4.2; // Natural language
+    }
+    
+    // Estimate assuming UTF-8 (most files are roughly 1 byte per character for typical code)
+    const estimatedChars = sizeInBytes;
+    const estimatedTokens = Math.ceil(estimatedChars / charsPerToken);
+    
+    logger.debug(`[TOKEN_ESTIMATE] ${filePath}: ${sizeInBytes} bytes → ~${estimatedTokens} tokens (${charsPerToken} chars/token)`);
+    
+    return estimatedTokens;
+  } catch (error) {
+    logger.warn(`Failed to estimate tokens for ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return 1000; // Conservative fallback estimate
+  }
+}
+
+/**
+ * Check if total file sizes would exceed token threshold before embedding.
+ *
+ * IMPORTANT: This performs STRICT REJECTION at MCP boundary.
+ * No partial inclusion - either all files fit or request is rejected.
+ * This forces Claude to make better file selection decisions.
+ */
+export async function checkTotalFileSize(files: string[], modelName: string): Promise<{
+  status: 'MCP_CODE_TOO_LARGE';
+  content: string;
+  content_type: 'text';
+} | null> {
+  if (!files || files.length === 0) {
+    return null;
+  }
+
+  // Import model context utilities for token limits
+  const { ModelContext } = await import('./model-context.js');
+  const modelContext = new ModelContext(modelName);
+  const allocation = await modelContext.calculateTokenAllocation();
+  const maxFileTokens = allocation.fileTokens || Math.floor(allocation.contentTokens * 0.7);
+
+  let totalEstimatedTokens = 0;
+  const fileEstimates: Array<{ path: string; tokens: number; size: number }> = [];
+
+  // Estimate tokens for all files
+  for (const filePath of files) {
+    try {
+      const estimatedTokens = await estimateFileTokens(filePath);
+      const stats = await getFileStats(filePath);
+      
+      fileEstimates.push({
+        path: filePath,
+        tokens: estimatedTokens,
+        size: stats.size,
+      });
+      
+      totalEstimatedTokens += estimatedTokens;
+    } catch (error) {
+      logger.warn(`Failed to estimate size for ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Add conservative estimate for inaccessible files
+      totalEstimatedTokens += 1000;
+      fileEstimates.push({
+        path: filePath,
+        tokens: 1000,
+        size: 0,
+      });
+    }
+  }
+
+  // Check if total would exceed limit
+  if (totalEstimatedTokens > maxFileTokens) {
+    const filesBreakdown = fileEstimates
+      .sort((a, b) => b.tokens - a.tokens) // Sort by token count, largest first
+      .map(f => `  • ${f.path}: ~${f.tokens.toLocaleString()} tokens (${formatFileSize(f.size)})`)
+      .join('\n');
+
+    const errorMessage = [
+      'MCP_CODE_TOO_LARGE: The requested files exceed the model\'s context limit and cannot be processed together.',
+      '',
+      `Total estimated tokens: ${totalEstimatedTokens.toLocaleString()}`,
+      `Model limit for files: ${maxFileTokens.toLocaleString()} tokens`,
+      `Model: ${modelName}`,
+      '',
+      'Files requested (sorted by size):',
+      filesBreakdown,
+      '',
+      'SOLUTION: Please reduce the number of files or select smaller files.',
+      'Consider analyzing files individually or in smaller groups.',
+      'Focus on the most relevant files for your specific question.',
+    ].join('\n');
+
+    logger.info(`[MCP_BOUNDARY] Rejecting request - ${files.length} files would use ${totalEstimatedTokens.toLocaleString()} tokens (limit: ${maxFileTokens.toLocaleString()})`);
+
+    return {
+      status: 'MCP_CODE_TOO_LARGE',
+      content: errorMessage,
+      content_type: 'text',
+    };
+  }
+
+  logger.debug(`[MCP_BOUNDARY] File size check passed - ${files.length} files estimated at ${totalEstimatedTokens.toLocaleString()} tokens (limit: ${maxFileTokens.toLocaleString()})`);
+  return null;
+}
+
+/**
+ * Read file content with formatting and token estimation
+ * 
+ * Returns formatted content suitable for embedding in conversation history
+ * along with accurate token count for budget tracking.
+ */
+export async function readFileContent(filePath: string): Promise<{ content: string; tokens: number }> {
+  try {
+    const content = await readFile(filePath);
+    
+    if (!content || content.trim().length === 0) {
+      return { content: '', tokens: 0 };
+    }
+
+    // Format content with line numbers and header
+    const lines = content.split('\n');
+    const maxLineNumberWidth = lines.length.toString().length;
+    
+    const formattedLines = lines.map((line, index) => {
+      const lineNumber = (index + 1).toString().padStart(maxLineNumberWidth, ' ');
+      return `${lineNumber}→${line}`;
+    });
+
+    const formattedContent = [
+      `--- File: ${filePath} ---`,
+      ...formattedLines,
+      `--- End of ${filePath} ---`,
+      ''
+    ].join('\n');
+
+    // Estimate tokens for the formatted content
+    const estimatedTokens = Math.ceil(formattedContent.length / 4); // Rough estimate: 4 chars per token
+
+    return {
+      content: formattedContent,
+      tokens: estimatedTokens,
+    };
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+    const errorContent = `--- File: ${filePath} (Error) ---\n[Error reading file: ${errorMsg}]\n--- End of ${filePath} ---\n`;
+    
+    return {
+      content: errorContent,
+      tokens: Math.ceil(errorContent.length / 4),
+    };
+  }
+}
