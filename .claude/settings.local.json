@@ -95,7 +95,8 @@
       "WebFetch(domain:archive.org)",
       "Bash(unzip:*)",
       "Bash(env)",
-      "WebFetch(domain:www.warp.dev)"
+      "WebFetch(domain:www.warp.dev)",
+      "Bash(zenode:analyze \"I need to analyze upstream commits to categorize them for porting to zenode. Here are the key commits from upstream since our last merge:\n\n1. Migration from Docker to Standalone Python Server (#73) - 4151c3c\n2. New Planner tool for breaking down complex projects - a509730  \n3. Add Consensus Tool for Multi-Model Perspective Gathering - 95556ba\n4. Vastly improved debug tool - 044a862\n5. Model discovery improvements for auto mode - 5199dd6, dad1e2d\n6. AI banter feature - 5c75ac9\n7. Various documentation improvements\n\nI need to categorize these into:\n1) Features to Port (priority ranked)\n2) Python specific stuff \n3) Config changes we may want\n4) Documentation changes for our claude.md\n\nPlease analyze these commits and help me understand what's most valuable to port to our Node.js zenode implementation.\")"
     ],
     "deny": []
   }
