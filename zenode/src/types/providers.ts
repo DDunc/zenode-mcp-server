@@ -2,6 +2,8 @@
  * Type definitions for AI model providers
  */
 
+import { ImageCapabilities } from './images.js';
+
 export enum ProviderType {
   GOOGLE = 'google',
   OPENAI = 'openai',
@@ -28,6 +30,9 @@ export interface ModelCapabilities {
   supportsJsonMode?: boolean;
   temperatureConstraint: TemperatureConstraint;
   temperatureRange?: [number, number]; // For backward compatibility
+  // Image support capabilities
+  supportsImages?: boolean;
+  maxImageSizeMB?: number;
 }
 
 export interface ModelUsage {
@@ -59,7 +64,15 @@ export interface ModelRequest {
 
 export interface Message {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | VisionContent[];
+}
+
+export interface VisionContent {
+  type: 'text' | 'image_url';
+  text?: string;
+  image_url?: {
+    url: string;
+  };
 }
 
 export interface ModelProvider {
@@ -71,6 +84,9 @@ export interface ModelProvider {
   getModelCapabilities(modelName: string): ModelCapabilities | null;
   validateModel(modelName: string): boolean;
   resolveModelAlias(alias: string): string | null;
+  
+  // Image support capability checking
+  getImageCapabilities(modelName: string): Promise<ImageCapabilities>;
 }
 
 export type ProviderFactory = (apiKey?: string) => ModelProvider | Promise<ModelProvider>;
@@ -82,6 +98,7 @@ export interface CustomModelConfig {
   supports_extended_thinking: boolean;
   supports_json_mode: boolean;
   supports_function_calling: boolean;
+  supports_images?: boolean;
   is_custom?: boolean;
   description: string;
 }

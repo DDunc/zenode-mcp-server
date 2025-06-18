@@ -7,12 +7,13 @@ import { MCPContent } from './mcp.js';
 import { ModelProvider } from './providers.js';
 
 export type ThinkingMode = 'minimal' | 'low' | 'medium' | 'high' | 'max';
-export type ToolModelCategory = 'fast' | 'reasoning' | 'extended_reasoning' | 'all';
+export type ToolModelCategory = 'fast' | 'reasoning' | 'extended_reasoning' | 'vision' | 'all';
 
 export const ToolModelCategory = {
   FAST: 'fast' as const,
   REASONING: 'reasoning' as const,
   EXTENDED_REASONING: 'extended_reasoning' as const,
+  VISION: 'vision' as const,
   ALL: 'all' as const,
 } as const;
 
@@ -141,10 +142,20 @@ export interface TestGenRequest extends ToolRequest {
 
 export interface ConfigRequest extends ToolRequest {
   action: 'setup' | 'list' | 'validate' | 'reset';
-  provider?: 'gemini' | 'openai' | 'openrouter' | 'custom';
+  provider?: 'gemini' | 'openai' | 'openrouter' | 'custom' | 'browserbase' | 'searchapi' | 'serpapi';
   api_key?: string;
   custom_url?: string;
   custom_model?: string;
+}
+
+export interface VisitRequest extends ToolRequest {
+  prompt?: string;
+  action?: 'browse' | 'search' | 'reverse_image_search' | 'screenshot';
+  url?: string;
+  query?: string;
+  engine?: 'google' | 'bing' | 'youtube' | 'auto';
+  location?: string;
+  take_screenshot?: boolean;
 }
 
 // Special status responses from tools

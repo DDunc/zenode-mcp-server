@@ -62,11 +62,17 @@ Remember: You're a thinking partner, not just an answer machine. Engage with the
   }
 
   async execute(args: ChatRequest): Promise<ToolOutput> {
+    const startTime = Date.now();
+    const requestId = `chat-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
     try {
       // Validate request
       const validated = ChatRequestSchema.parse(args);
       
       logger.info(`Chat tool invoked with prompt length: ${validated.prompt.length}`);
+      
+      // Log the request (Redis-based conversation logger)
+      await this.logToolRequest(requestId, validated, validated.continuation_id);
       
       // Check if this might be a first-time user who needs bootstrap guidance
       const bootstrapCheck = shouldShowBootstrapGuidance();
@@ -111,8 +117,16 @@ ${bootstrapResult.content}
       // Check prompt size
       this.checkPromptSize(validated.prompt);
       
-      // Select model
-      const selectedModel = await this.selectModel(validated.model);
+      // Validate images if provided
+      if (validated.images && validated.images.length > 0) {
+        const imageValidation = await this.validateImageLimits(validated.images, validated.model || 'auto');
+        if (imageValidation) {
+          return imageValidation; // Return error if image validation fails
+        }
+      }
+      
+      // Select model (with automatic vision model selection if images present)
+      const selectedModel = await this.selectModel(validated.model, undefined, !!validated.images?.length);
       const provider = await modelProviderRegistry.getProviderForModel(selectedModel);
       
       if (!provider) {
@@ -174,7 +188,7 @@ ${bootstrapResult.content}
       );
       
       // Format output
-      return this.formatOutput(
+      const result = this.formatOutput(
         response.content,
         'success',
         'text',
@@ -185,20 +199,36 @@ ${bootstrapResult.content}
         continuationOffer,
       );
       
+      // Log the successful response (Redis-based conversation logger)
+      const duration = Date.now() - startTime;
+      await this.logToolResponse(requestId, result, undefined, duration, validated.continuation_id);
+      
+      return result;
+      
     } catch (error) {
       logger.error('Chat tool error:', error);
       
-      if (error instanceof z.ZodError) {
-        return this.formatOutput(
-          `Invalid request: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
-          'error',
-        );
-      }
+      // Log the error response (Redis-based conversation logger)
+      const duration = Date.now() - startTime;
+      const errorResult = error instanceof z.ZodError
+        ? this.formatOutput(
+            `Invalid request: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
+            'error',
+          )
+        : this.formatOutput(
+            `Chat failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            'error',
+          );
       
-      return this.formatOutput(
-        `Chat failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'error',
+      await this.logToolResponse(
+        requestId, 
+        errorResult, 
+        error instanceof Error ? error : new Error(String(error)), 
+        duration,
+        (args as any)?.continuation_id
       );
+      
+      return errorResult;
     }
   }
 }

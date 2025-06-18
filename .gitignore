@@ -177,3 +177,14 @@ zenode/.zenode/test-volume-mount.txt
 *.conversation.log
 *.mcp.log
 mcp_*.log
+
+# Node modules and package files
+node_modules/
+package-lock.json
+npm-debug.log*
+
+# Security files  
+SECURITY-AUDIT-RESULTS.md
+*.key
+**/api-keys/
+**/secrets/

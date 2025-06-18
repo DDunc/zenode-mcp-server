@@ -15,6 +15,7 @@ import {
   ModelCapabilities,
   Message,
 } from '../types/providers.js';
+import { ImageCapabilities } from '../types/images.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -152,5 +153,36 @@ export class GeminiProvider extends BaseModelProvider {
     prompt += 'Assistant: ';
 
     return prompt;
+  }
+
+  /**
+   * Get image capabilities for Gemini models
+   */
+  async getImageCapabilities(modelName: string): Promise<ImageCapabilities> {
+    const resolvedName = this.resolveModelAlias(modelName) || modelName;
+    
+    // Gemini vision models and their limits
+    const visionModels = new Set([
+      'gemini-pro-vision',
+      'gemini-2.5-pro-preview-06-05',
+      'gemini-2.5-flash-preview-05-20',
+      'pro',
+      'flash',
+    ]);
+
+    if (visionModels.has(resolvedName)) {
+      return {
+        supportsImages: true,
+        maxImageSizeMB: 16, // Gemini limit for vision models
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      };
+    }
+
+    // Non-vision models
+    return {
+      supportsImages: false,
+      maxImageSizeMB: 0,
+      supportedFormats: [],
+    };
   }
 }

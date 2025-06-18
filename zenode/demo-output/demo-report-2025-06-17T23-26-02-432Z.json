@@ -1,0 +1,50 @@
+{
+  "timestamp": "2025-06-17T23:26:02.877Z",
+  "demo_results": {
+    "source_url": "https://httpbin.org/image/png",
+    "image_metadata": {
+      "size_bytes": 8090,
+      "size_kb": 7.9,
+      "extension": ".png",
+      "is_data_url": true
+    },
+    "provider_capabilities": {
+      "openai_gpt4o": {
+        "supports_images": true,
+        "max_size_mb": 20,
+        "supported_formats": [
+          ".jpg",
+          ".jpeg",
+          ".png",
+          ".gif",
+          ".webp"
+        ],
+        "validation_result": true
+      },
+      "gemini_pro": {
+        "supports_images": true,
+        "max_size_mb": 16,
+        "supported_formats": [
+          ".jpg",
+          ".jpeg",
+          ".png",
+          ".gif",
+          ".webp"
+        ],
+        "validation_result": true
+      }
+    },
+    "type_system_tests": {
+      "data_url_detection": true,
+      "extension_validation": {
+        "png_valid": true,
+        "txt_invalid": false
+      }
+    },
+    "data_url_info": {
+      "total_length": 10810,
+      "mime_type": "image/png",
+      "base64_size": 8090
+    }
+  }
+}

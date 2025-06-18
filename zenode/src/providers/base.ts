@@ -11,6 +11,7 @@ import {
   TemperatureConstraint,
   Message,
 } from '../types/providers.js';
+import { ImageCapabilities, IMAGE_EXTENSIONS } from '../types/images.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -178,6 +179,19 @@ export abstract class BaseModelProvider implements ModelProvider {
   }
 
   /**
+   * Get image capabilities for a specific model
+   * Default implementation returns no image support - override in providers that support images
+   */
+  async getImageCapabilities(modelName: string): Promise<ImageCapabilities> {
+    // Default: no image support
+    return {
+      supportsImages: false,
+      maxImageSizeMB: 0,
+      supportedFormats: [],
+    };
+  }
+
+  /**
    * Validate and correct temperature for a model
    */
   protected validateTemperature(modelName: string, requestedTemp?: number): number {
@@ -227,11 +241,28 @@ export abstract class BaseModelProvider implements ModelProvider {
    * Log API request for debugging
    */
   protected logRequest(modelName: string, messages: Message[], temperature: number): void {
+    const lastMessage = messages[messages.length - 1];
+    let lastMessagePreview = 'No messages';
+    
+    if (lastMessage) {
+      if (typeof lastMessage.content === 'string') {
+        lastMessagePreview = lastMessage.content.substring(0, 100) + '...';
+      } else if (Array.isArray(lastMessage.content)) {
+        // Handle vision requests with content array
+        const textParts = lastMessage.content
+          .filter(part => part.type === 'text')
+          .map(part => part.text)
+          .join(' ');
+        const imageCount = lastMessage.content.filter(part => part.type === 'image_url').length;
+        lastMessagePreview = `${textParts.substring(0, 80)}... [+${imageCount} images]`;
+      }
+    }
+    
     logger.debug(`${this.friendlyName} API Request`, {
       model: modelName,
       messageCount: messages.length,
       temperature,
-      lastMessage: messages[messages.length - 1]?.content.substring(0, 100) + '...',
+      lastMessage: lastMessagePreview,
     });
   }
 

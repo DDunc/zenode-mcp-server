@@ -24,8 +24,10 @@ import {
 import { zodToJsonSchema, validateToolArgs } from '../utils/schema-helpers.js';
 import { ModelProvider, ModelRequest, Message } from '../types/providers.js';
 import { modelProviderRegistry } from '../providers/registry.js';
+import { validateImages } from '../utils/image-utils.js';
 import { 
   DEFAULT_MODEL, 
+  DEFAULT_VISION_MODEL,
   IS_AUTO_MODE, 
   MODEL_CAPABILITIES_DESC,
   MCP_PROMPT_SIZE_LIMIT,
@@ -42,6 +44,7 @@ import {
   estimateFileTokens, 
   checkTotalFileSize 
 } from '../utils/file-utils.js';
+import { redisConversationLogger } from '../utils/redis-conversation-logger.js';
 
 /**
  * Base request schema with common fields
@@ -52,6 +55,11 @@ export const BaseRequestSchema = z.object({
   thinking_mode: z.enum(['minimal', 'low', 'medium', 'high', 'max']).optional(),
   use_websearch: z.boolean().default(true),
   continuation_id: z.string().optional(),
+  images: z.array(z.string()).optional().describe(
+    "Optional image(s) for visual context. Accepts absolute file paths or " +
+    "base64 data URLs. Useful for UI discussions, diagrams, visual problems, " +
+    "error screens, architecture mockups, and visual analysis tasks."
+  ),
 });
 
 /**
@@ -86,6 +94,50 @@ export abstract class BaseTool {
   abstract execute(args: ToolRequest): Promise<ToolOutput>;
 
   /**
+   * Log tool execution request (Redis-based conversation logger)
+   */
+  protected async logToolRequest(
+    requestId: string,
+    input: any,
+    conversationId?: string
+  ): Promise<void> {
+    try {
+      await redisConversationLogger.logRequest(
+        requestId,
+        this.name,
+        input,
+        conversationId
+      );
+    } catch (error) {
+      logger.warn('Failed to log tool request:', error);
+    }
+  }
+
+  /**
+   * Log tool execution response (Redis-based conversation logger)
+   */
+  protected async logToolResponse(
+    requestId: string,
+    output: any,
+    error?: Error,
+    duration?: number,
+    conversationId?: string
+  ): Promise<void> {
+    try {
+      await redisConversationLogger.logResponse(
+        requestId,
+        this.name,
+        output,
+        error,
+        duration,
+        conversationId
+      );
+    } catch (error) {
+      logger.warn('Failed to log tool response:', error);
+    }
+  }
+
+  /**
    * Validate and parse tool arguments
    */
   protected validateArgs<T>(args: any): T {
@@ -98,10 +150,11 @@ export abstract class BaseTool {
   protected async selectModel(
     requestedModel: string | undefined,
     provider?: ModelProvider,
+    hasImages?: boolean,
   ): Promise<string> {
     // Handle explicit "auto" model request
     if (requestedModel === 'auto') {
-      return this.selectBestModel();
+      return this.selectBestModel(hasImages);
     }
 
     // If a specific model is requested, validate and use it
@@ -113,9 +166,33 @@ export abstract class BaseTool {
       return requestedModel;
     }
 
+    // Auto-select vision model if images are present and no specific model requested
+    if ((IS_AUTO_MODE || !requestedModel) && hasImages) {
+      // Check if DEFAULT_VISION_MODEL is available
+      const availableModels = await modelProviderRegistry.getAvailableModels(true);
+      if (availableModels.includes(DEFAULT_VISION_MODEL)) {
+        logger.info(`Auto-selecting vision model for image analysis: ${DEFAULT_VISION_MODEL}`);
+        return DEFAULT_VISION_MODEL;
+      }
+      // Fallback to vision-capable models
+      const visionModels = [
+        'openai/gpt-4o',
+        'openai/gpt-4o-mini', 
+        'anthropic/claude-3-sonnet',
+        'google/gemini-2.5-pro-preview',
+        'meta-llama/llama-4-maverick-17b-instruct'
+      ];
+      for (const model of visionModels) {
+        if (availableModels.includes(model)) {
+          logger.info(`Auto-selecting available vision model: ${model}`);
+          return model;
+        }
+      }
+    }
+
     // In auto mode, let the system choose based on tool category
     if (IS_AUTO_MODE || !requestedModel) {
-      return this.selectBestModel();
+      return this.selectBestModel(hasImages);
     }
 
     return requestedModel;
@@ -124,11 +201,34 @@ export abstract class BaseTool {
   /**
    * Select the best model based on tool category
    */
-  private async selectBestModel(): Promise<string> {
+  private async selectBestModel(hasImages?: boolean): Promise<string> {
     const availableModels = await modelProviderRegistry.getAvailableModels(true);
     
     if (availableModels.length === 0) {
       throw new Error('No models available');
+    }
+
+    // If images are present, prefer vision-capable models first
+    if (hasImages) {
+      // Check if DEFAULT_VISION_MODEL is available
+      if (availableModels.includes(DEFAULT_VISION_MODEL)) {
+        logger.info(`Auto-selecting vision model for image analysis: ${DEFAULT_VISION_MODEL}`);
+        return DEFAULT_VISION_MODEL;
+      }
+      // Fallback to vision-capable models
+      const visionModels = [
+        'openai/gpt-4o',
+        'openai/gpt-4o-mini', 
+        'anthropic/claude-3-sonnet',
+        'google/gemini-2.5-pro-preview',
+        'meta-llama/llama-4-maverick-17b-instruct'
+      ];
+      for (const model of visionModels) {
+        if (availableModels.includes(model)) {
+          logger.info(`Auto-selecting available vision model: ${model}`);
+          return model;
+        }
+      }
     }
 
     // Tool category preferences
@@ -146,6 +246,24 @@ export abstract class BaseTool {
         const reasoningModels = ['pro', 'gemini-2.5-pro-preview-06-05', 'o3', 'o3-pro', 'o4-mini-high'];
         for (const model of reasoningModels) {
           if (availableModels.includes(model)) return model;
+        }
+        break;
+        
+      case 'vision':
+        // Always prefer vision models for vision tools
+        const visionModels = [
+          DEFAULT_VISION_MODEL,
+          'openai/gpt-4o',
+          'openai/gpt-4o-mini',
+          'anthropic/claude-3-sonnet',
+          'google/gemini-2.5-pro-preview',
+          'meta-llama/llama-4-maverick-17b-instruct'
+        ];
+        for (const model of visionModels) {
+          if (availableModels.includes(model)) {
+            logger.info(`Vision tool selecting vision model: ${model}`);
+            return model;
+          }
         }
         break;
         
@@ -500,5 +618,59 @@ export abstract class BaseTool {
 
     // Use centralized file size checking with model context
     return await checkTotalFileSize(files, currentModel);
+  }
+
+  /**
+   * Validate image limits at MCP boundary with model capability checking.
+   * 
+   * This performs strict validation to ensure we don't exceed model-specific
+   * image size limits and that the model supports images at all.
+   *
+   * @param images List of image paths/data URLs to validate
+   * @param modelName Name of the model to check limits against
+   * @returns Error response if validation fails, null if valid
+   */
+  protected async validateImageLimits(
+    images: string[] | undefined,
+    modelName: string
+  ): Promise<ToolOutput | null> {
+    if (!images?.length) {
+      return null;
+    }
+
+    try {
+      logger.debug(`[IMAGE_VALIDATION] Validating ${images.length} images for model ${modelName}`);
+      
+      // Get model provider to check image capabilities
+      const provider = await modelProviderRegistry.getProviderForModel(modelName);
+      if (!provider) {
+        return this.formatOutput(
+          `Model ${modelName} is not available. Please check your configuration.`,
+          'error'
+        );
+      }
+
+      // Get image capabilities for this model
+      const capabilities = await provider.getImageCapabilities(modelName);
+      
+      // Validate images against capabilities
+      const validation = await validateImages(images, capabilities);
+      
+      if (!validation.valid) {
+        return this.formatOutput(
+          `Image validation failed: ${validation.error}`,
+          'error'
+        );
+      }
+
+      logger.debug(`[IMAGE_VALIDATION] All images valid for model ${modelName}`);
+      return null;
+    } catch (error) {
+      logger.error(`[IMAGE_VALIDATION] Error validating images:`, error);
+      return this.formatOutput(
+        `Failed to validate images: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error'
+      );
+    }
   }
 }

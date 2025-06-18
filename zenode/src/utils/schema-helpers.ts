@@ -57,6 +57,11 @@ function convertZodType(zodType: ZodSchema, key: string): { schema: any; require
     zodType = zodType.removeDefault();
   }
 
+  // Extract description from Zod schema if available
+  if (zodType._def.description) {
+    schema.description = zodType._def.description;
+  }
+
   if (zodType instanceof z.ZodString) {
     schema.type = 'string';
     
@@ -106,6 +111,11 @@ function convertZodType(zodType: ZodSchema, key: string): { schema: any; require
       
       if (key === 'files') {
         schema.description = 'Files or directories to process (must be absolute paths)';
+      } else if (key === 'images') {
+        // Use the description from Zod if available, otherwise fallback
+        if (!schema.description) {
+          schema.description = 'Optional image(s) for visual context';
+        }
       }
     }
   } else if (zodType instanceof z.ZodEnum) {
@@ -146,6 +156,11 @@ export const BaseToolRequestSchema = z.object({
   thinking_mode: z.enum(['minimal', 'low', 'medium', 'high', 'max']).optional(),
   use_websearch: z.boolean().default(true),
   continuation_id: z.string().optional(),
+  images: z.array(z.string()).optional().describe(
+    "Optional image(s) for visual context. Accepts absolute file paths or " +
+    "base64 data URLs. Useful for UI discussions, diagrams, visual problems, " +
+    "error screens, architecture mockups, and visual analysis tasks."
+  ),
 });
 
 /**

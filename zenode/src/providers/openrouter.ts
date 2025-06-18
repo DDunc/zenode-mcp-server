@@ -17,6 +17,7 @@ import {
   Message,
   CustomModelsConfig,
 } from '../types/providers.js';
+import { ImageCapabilities } from '../types/images.js';
 import { logger } from '../utils/logger.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -34,6 +35,8 @@ export class OpenRouterProvider extends BaseModelProvider {
   private client: AxiosInstance;
   private customModelsConfig: CustomModelsConfig | null = null;
 
+  private initializationPromise: Promise<void> | null = null;
+
   constructor(apiKey: string) {
     super(apiKey);
     
@@ -48,7 +51,21 @@ export class OpenRouterProvider extends BaseModelProvider {
       },
     });
 
-    this.initializeModels();
+    // Start initialization but track the promise
+    this.initializationPromise = this.initializeModels().catch(error => {
+      logger.error('Failed to initialize OpenRouter models:', error);
+      throw error;
+    });
+  }
+
+  /**
+   * Ensure provider is fully initialized before use
+   */
+  private async ensureInitialized(): Promise<void> {
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+      this.initializationPromise = null;
+    }
   }
 
   /**
@@ -209,6 +226,9 @@ export class OpenRouterProvider extends BaseModelProvider {
    * Generate a response from OpenRouter
    */
   async generateResponse(request: ModelRequest): Promise<ModelResponse> {
+    // Ensure provider is fully initialized before processing
+    await this.ensureInitialized();
+    
     const modelName = this.resolveModelAlias(request.model) || request.model;
     const temperature = this.validateTemperature(modelName, request.temperature);
 
@@ -278,5 +298,148 @@ export class OpenRouterProvider extends BaseModelProvider {
       
       this.handleApiError(error, modelName);
     }
+  }
+
+  /**
+   * Get image capabilities for OpenRouter models
+   */
+  async getImageCapabilities(modelName: string): Promise<ImageCapabilities> {
+    // Ensure provider is fully initialized before processing
+    await this.ensureInitialized();
+    
+    const resolvedName = this.resolveModelAlias(modelName) || modelName;
+    
+    // OpenRouter vision models and their limits
+    const visionModels = new Map<string, ImageCapabilities>([
+      // OpenAI models via OpenRouter
+      ['openai/gpt-4o', {
+        supportsImages: true,
+        maxImageSizeMB: 20,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['openai/gpt-4o-mini', {
+        supportsImages: true,
+        maxImageSizeMB: 20,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['openai/o3', {
+        supportsImages: true,
+        maxImageSizeMB: 20,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['openai/o3-mini', {
+        supportsImages: true,
+        maxImageSizeMB: 20,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['openai/o3-mini-high', {
+        supportsImages: true,
+        maxImageSizeMB: 20,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['openai/o3-pro', {
+        supportsImages: true,
+        maxImageSizeMB: 20,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['openai/o4-mini', {
+        supportsImages: true,
+        maxImageSizeMB: 20,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['openai/o4-mini-high', {
+        supportsImages: true,
+        maxImageSizeMB: 20,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      
+      // Claude models via OpenRouter (Claude 3+ supports images)
+      ['anthropic/claude-3-opus', {
+        supportsImages: true,
+        maxImageSizeMB: 5,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['anthropic/claude-3-sonnet', {
+        supportsImages: true,
+        maxImageSizeMB: 5,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['anthropic/claude-3-haiku', {
+        supportsImages: true,
+        maxImageSizeMB: 5,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['anthropic/claude-3-5-sonnet-20241022', {
+        supportsImages: true,
+        maxImageSizeMB: 5,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['anthropic/claude-sonnet-4-20250514', {
+        supportsImages: true,
+        maxImageSizeMB: 5,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      
+      // Gemini models via OpenRouter
+      ['google/gemini-2.5-pro-preview', {
+        supportsImages: true,
+        maxImageSizeMB: 16,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['google/gemini-2.5-flash-preview-05-20', {
+        supportsImages: true,
+        maxImageSizeMB: 16,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['google/gemini-2.5-pro-preview-06-05', {
+        supportsImages: true,
+        maxImageSizeMB: 16,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      
+      // Llama models via OpenRouter (Llama 3.2 11B Vision, Llama 4 models)
+      ['meta-llama/llama-3.2-11b-vision-instruct', {
+        supportsImages: true,
+        maxImageSizeMB: 10,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['meta-llama/llama-4-maverick-17b-instruct', {
+        supportsImages: true,
+        maxImageSizeMB: 15,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['meta-llama/llama-4-scout', {
+        supportsImages: true,
+        maxImageSizeMB: 15,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      
+      // Mistral models with vision (Mistral Small 3.1)
+      ['mistralai/mistral-small-3.1', {
+        supportsImages: true,
+        maxImageSizeMB: 8,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+    ]);
+
+    // Check exact model match
+    const capabilities = visionModels.get(resolvedName);
+    if (capabilities) {
+      return capabilities;
+    }
+
+    // Check for partial matches (for models that might have version suffixes)
+    for (const [modelKey, caps] of visionModels.entries()) {
+      if (resolvedName.includes(modelKey) || modelKey.includes(resolvedName)) {
+        return caps;
+      }
+    }
+
+    // Non-vision models
+    return {
+      supportsImages: false,
+      maxImageSizeMB: 0,
+      supportedFormats: [],
+    };
   }
 }

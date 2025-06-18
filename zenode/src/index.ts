@@ -31,6 +31,7 @@ import {
 
 import { VERSION, AUTHOR, UPDATED, hasAnyApiConfigured, getConfiguredProviders, IS_AUTO_MODE } from './config.js';
 import { logger, mcpActivityLogger } from './utils/logger.js';
+import winston from 'winston';
 import { modelProviderRegistry } from './providers/registry.js';
 import { BaseTool, ToolOutput } from './types/tools.js';
 import { reconstructThreadContext } from './utils/conversation-memory.js';
@@ -49,6 +50,8 @@ import { GopherTool } from './tools/gopher.js';
 import { GruntsTool } from './tools/grunts.js';
 import { ConfigTool } from './tools/config.js';
 import { BootstrapTool } from './tools/bootstrap.js';
+import { SeerTool } from './tools/seer.js';
+import { VisitTool } from './tools/visit.js';
 
 // Create the MCP server instance with a unique name identifier
 // This name is used by MCP clients to identify and connect to this specific server
@@ -79,6 +82,8 @@ const TOOLS: Record<string, BaseTool> = {
   grunts: new GruntsTool(), // Distributed LLM orchestration system
   config: new ConfigTool(), // Interactive CLI configuration tool
   bootstrap: new BootstrapTool(), // First-time setup and project configuration
+  seer: new SeerTool(), // Dedicated vision and image analysis tool
+  visit: new VisitTool(), // Web browsing, search, and reverse image search
 };
 
 // Initialize middleware pipeline
@@ -566,8 +571,121 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-// Start the server
-main().catch((error) => {
+/**
+ * CLI Mode Handler
+ * 
+ * Enables zenode to run as both MCP server and CLI tool
+ * Usage: node dist/index.js [toolname] [json_args]
+ * Example: node dist/index.js seer '{"prompt":"analyze image","images":["/path/to/image.jpg"]}'
+ */
+async function runCliMode() {
+  const toolName = process.argv[2];
+  const argsJson = process.argv[3] || '{}';
+  
+  if (!toolName) {
+    console.log(`❌ Tool name required. Usage: node dist/index.js <toolname> [json_args]`);
+    console.log(`Available tools: ${Object.keys(TOOLS).concat(['version']).join(', ')}`);
+    process.exit(1);
+  }
+  
+  // Suppress winston logging in CLI mode unless debug is enabled
+  if (!process.env.ZENODE_CLI_DEBUG) {
+    logger.transports.forEach(transport => {
+      if (transport instanceof winston.transports.Console) {
+        transport.silent = true;
+      }
+    });
+  }
+  
+  console.log(`🔧 Zenode CLI Mode - Running tool: ${toolName}`);
+  
+  try {
+    const args = JSON.parse(argsJson);
+    
+    // Validate API configuration
+    if (!hasAnyApiConfigured()) {
+      throw new Error(
+        'No API keys configured. Please set at least one of: ' +
+          'GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, or CUSTOM_API_URL',
+      );
+    }
+
+    // Configure providers
+    await configureProviders();
+    
+    let result: any;
+    
+    // Route to AI-powered tools
+    if (toolName in TOOLS) {
+      console.log(`⚡ Executing ${toolName} tool...`);
+      const tool = TOOLS[toolName as keyof typeof TOOLS];
+      if (!tool) {
+        throw new Error(`Tool ${toolName} not found in registry`);
+      }
+      result = await tool.execute(args);
+      console.log(`✅ ${toolName} completed successfully`);
+    }
+    // Handle version tool
+    else if (toolName === 'version') {
+      result = formatVersionResponse();
+    }
+    // Unknown tool
+    else {
+      throw new Error(`Unknown tool: ${toolName}. Available tools: ${Object.keys(TOOLS).concat(['version']).join(', ')}`);
+    }
+    
+    // Output result as JSON for programmatic use, or formatted for human reading
+    if (process.env.ZENODE_CLI_OUTPUT === 'json') {
+      console.log(JSON.stringify(result, null, 2));
+    } else {
+      if (toolName === 'version') {
+        console.log(result.content[0].text);
+      } else {
+        console.log('\n📋 Result:');
+        console.log(result.content);
+        if (result.continuation_offer) {
+          const offer = result.continuation_offer;
+          console.log(`\n🔗 Thread: ${offer.thread_id} | Turns: ${offer.stats.total_turns} | Tokens: ${offer.stats.total_input_tokens + offer.stats.total_output_tokens}`);
+        }
+      }
+    }
+    
+    // Exit successfully in CLI mode
+    process.exit(0);
+    
+  } catch (error) {
+    console.error(`❌ CLI Error:`, error instanceof Error ? error.message : error);
+    process.exit(1);
+  }
+}
+
+/**
+ * Main entry point - detects MCP vs CLI mode
+ */
+async function startZenode() {
+  // Force MCP mode for testing - disable CLI detection temporarily
+  const forceMcpMode = true;
+  
+  if (forceMcpMode) {
+    // Always run in MCP Server Mode for testing
+    console.error('DEBUG: Forced MCP server mode');
+    await main();
+  } else {
+    // Check if CLI arguments are provided
+    const hasCliArgs = process.argv.length > 2;
+    
+    if (hasCliArgs) {
+      // CLI Mode: node dist/index.js toolname args
+      await runCliMode();
+    } else {
+      // MCP Server Mode: Default behavior for MCP clients
+      await main();
+    }
+  }
+}
+
+// Start zenode in appropriate mode
+startZenode().catch((error) => {
   logger.error('Unhandled error:', error);
   process.exit(1);
 });

@@ -32,6 +32,12 @@ export const AUTHOR = 'Zenode Team';
 // Special value "auto" means Claude should pick the best model for each task
 export const DEFAULT_MODEL = process.env.DEFAULT_MODEL || 'auto';
 
+// Vision/Image Analysis Configuration
+// DEFAULT_VISION_MODEL: The default model used specifically for image analysis tasks
+// Using GPT-4o for reliable vision capabilities via OpenRouter
+// Can be overridden by setting DEFAULT_VISION_MODEL environment variable to meta-llama/llama-3.2-11b-vision-instruct
+export const DEFAULT_VISION_MODEL = process.env.DEFAULT_VISION_MODEL || 'openai/gpt-4o';
+
 // Auto mode detection - when DEFAULT_MODEL is "auto", Claude picks the model
 export const IS_AUTO_MODE = DEFAULT_MODEL.toLowerCase() === 'auto';
 
@@ -59,6 +65,12 @@ export const MODEL_CAPABILITIES_DESC: Record<string, string> = {
     'Professional-grade reasoning (200K context) - EXTREMELY EXPENSIVE: Only for the most complex problems requiring universe-scale complexity analysis OR when the user explicitly asks for this model. Use sparingly for critical architectural decisions or exceptionally complex debugging that other models cannot handle.',
   'o4-mini': 'Latest reasoning model (200K context) - Optimized for shorter contexts, rapid reasoning',
   'o4-mini-high': 'Enhanced O4 mini (200K context) - Higher reasoning effort for complex tasks',
+  // Vision/Image Analysis Models (via OpenRouter) - June 2025 Recommendations
+  'openai/gpt-4o': 'TOP VISION MODEL (20MB images) - Superior multimodal: text, audio, images, video. Best for image analysis, OCR, face recognition, UI/UX review',
+  'openai/gpt-4o-mini': 'Fast vision model (20MB images) - Cost-effective multimodal with excellent image understanding capabilities',
+  'meta-llama/llama-4-maverick-17b-instruct': 'Advanced vision (15MB images, 1M context) - Latest Llama 4 with 128 experts, optimized for complex visual reasoning',
+  'anthropic/claude-3-sonnet': 'Reliable vision (5MB images) - Excellent for code screenshot analysis, UI review, technical diagrams',
+  'google/gemini-2.5-pro-preview': 'High-capacity vision (16MB images, 1M context) - Best for document OCR, long visual content analysis',
   // Full model names also supported (for explicit specification)
   'gemini-2.5-flash-preview-05-20':
     'Ultra-fast (1M context) - Quick analysis, simple queries, rapid iterations',
@@ -150,6 +162,9 @@ export const NEEDS_PROJECT_MOUNT = IS_IN_PROJECT && !process.env.MCP_PROJECT_MOU
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 export const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 export const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+export const BROWSERBASE_API_KEY = process.env.BROWSERBASE_API_KEY;
+export const SEARCHAPI_KEY = process.env.SEARCHAPI_KEY;
+export const SERPAPI_KEY = process.env.SERPAPI_KEY;
 export const CUSTOM_API_URL = process.env.CUSTOM_API_URL;
 export const CUSTOM_API_KEY = process.env.CUSTOM_API_KEY || '';
 export const CUSTOM_MODEL_NAME = process.env.CUSTOM_MODEL_NAME || 'llama3.2';

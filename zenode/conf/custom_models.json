@@ -194,6 +194,56 @@
       "description": "OpenAI's o4-mini with high reasoning effort - enhanced for complex tasks"
     },
     {
+      "model_name": "openai/gpt-4o",
+      "aliases": ["gpt-4o", "gpt4o", "vision"],
+      "context_window": 128000,
+      "supports_extended_thinking": false,
+      "supports_json_mode": true,
+      "supports_function_calling": true,
+      "supports_images": true,
+      "description": "OpenAI GPT-4o - Top vision model with superior image analysis capabilities (20MB images)"
+    },
+    {
+      "model_name": "openai/gpt-4o-mini",
+      "aliases": ["gpt-4o-mini", "gpt4o-mini", "vision-mini"],
+      "context_window": 128000,
+      "supports_extended_thinking": false,
+      "supports_json_mode": true,
+      "supports_function_calling": true,
+      "supports_images": true,
+      "description": "OpenAI GPT-4o Mini - Fast and cost-effective vision model (20MB images)"
+    },
+    {
+      "model_name": "anthropic/claude-3-sonnet",
+      "aliases": ["claude-sonnet", "sonnet", "claude3-sonnet"],
+      "context_window": 200000,
+      "supports_extended_thinking": false,
+      "supports_json_mode": false,
+      "supports_function_calling": false,
+      "supports_images": true,
+      "description": "Claude 3 Sonnet - Reliable vision analysis, excellent for technical diagrams (5MB images)"
+    },
+    {
+      "model_name": "google/gemini-2.5-pro-preview",
+      "aliases": ["gemini-vision", "gemini-pro-vision"],
+      "context_window": 1000000,
+      "supports_extended_thinking": false,
+      "supports_json_mode": true,
+      "supports_function_calling": true,
+      "supports_images": true,
+      "description": "Google Gemini 2.5 Pro - High-capacity vision analysis with 1M context (16MB images)"
+    },
+    {
+      "model_name": "meta-llama/llama-3.2-11b-vision-instruct",
+      "aliases": ["llama-vision", "llama3.2-vision", "vision-llama"],
+      "context_window": 128000,
+      "supports_extended_thinking": false,
+      "supports_json_mode": false,
+      "supports_function_calling": false,
+      "supports_images": true,
+      "description": "Meta Llama 3.2 11B Vision - Optimized vision model with excellent image understanding (10MB images)"
+    },
+    {
       "model_name": "llama3.2",
       "aliases": ["local-llama", "local", "llama3.2", "ollama-llama"],
       "context_window": 128000,

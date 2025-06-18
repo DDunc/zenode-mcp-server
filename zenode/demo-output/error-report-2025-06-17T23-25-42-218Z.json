@@ -1,0 +1,7 @@
+{
+  "timestamp": "2025-06-17T23:25:42.543Z",
+  "error": {
+    "message": "HTTP 302: Found",
+    "stack": "Error: HTTP 302: Found\n    at ClientRequest.<anonymous> (/Users/edunc/Documents/gitz/zen-mcp-server/zenode/demo/image-demo.ts:44:16)\n    at Object.onceWrapper (node:events:633:26)\n    at ClientRequest.emit (node:events:518:28)\n    at HTTPParser.parserOnIncomingClient (node:_http_client:702:27)\n    at HTTPParser.parserOnHeadersComplete (node:_http_common:118:17)\n    at TLSSocket.socketOnData (node:_http_client:544:22)\n    at TLSSocket.emit (node:events:518:28)\n    at addChunk (node:internal/streams/readable:561:12)\n    at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)\n    at Readable.push (node:internal/streams/readable:392:5)"
+  }
+}

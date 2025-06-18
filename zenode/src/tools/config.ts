@@ -16,7 +16,7 @@ import { logger } from '../utils/logger.js';
  */
 const ConfigRequestSchema = BaseToolRequestSchema.extend({
   action: z.enum(['setup', 'list', 'validate', 'reset']).describe('Configuration action to perform'),
-  provider: z.enum(['gemini', 'openai', 'openrouter', 'custom']).optional().describe('Provider to configure'),
+  provider: z.enum(['gemini', 'openai', 'openrouter', 'custom', 'browserbase', 'searchapi', 'serpapi']).optional().describe('Provider to configure'),
   api_key: z.string().optional().describe('API key to set (only used with setup action)'),
   custom_url: z.string().optional().describe('Custom API URL (for custom provider)'),
   custom_model: z.string().optional().describe('Custom model name (for custom provider)'),
@@ -29,6 +29,9 @@ interface ApiConfig {
   gemini?: string;
   openai?: string;
   openrouter?: string;
+  browserbase?: string;
+  searchapi?: string;
+  serpapi?: string;
   custom?: {
     url: string;
     key?: string;
@@ -186,6 +189,55 @@ Remember: The goal is to get users up and running quickly with at least one work
           'success'
         );
 
+      case 'browserbase':
+        if (!args.api_key) {
+          return this.formatOutput(this.getBrowserbaseSetupInstructions(), 'success');
+        }
+        await this.setApiKey('BROWSERBASE_API_KEY', args.api_key);
+        return this.formatOutput(
+          '✅ Browserbase API key configured successfully!\n\n' +
+          'Browserbase provides access to:\n' +
+          '- Remote browser automation for web scraping\n' +
+          '- Reverse image search capabilities\n' +
+          '- Web page screenshot and analysis\n\n' +
+          'Used by: zenode:visitor tool\n' +
+          'Test your configuration with: `zenode:config validate`',
+          'success'
+        );
+
+      case 'searchapi':
+        if (!args.api_key) {
+          return this.formatOutput(this.getSearchAPISetupInstructions(), 'success');
+        }
+        await this.setApiKey('SEARCHAPI_KEY', args.api_key);
+        return this.formatOutput(
+          '✅ SearchAPI key configured successfully!\n\n' +
+          'SearchAPI provides access to:\n' +
+          '- Google Search results\n' +
+          '- Google Images reverse search\n' +
+          '- YouTube, Google Shopping, and more search engines\n\n' +
+          'Used by: zenode:visit tool\n' +
+          'Test your configuration with: `zenode:config validate`',
+          'success'
+        );
+
+      case 'serpapi':
+        if (!args.api_key) {
+          return this.formatOutput(this.getSerpAPISetupInstructions(), 'success');
+        }
+        await this.setApiKey('SERPAPI_KEY', args.api_key);
+        return this.formatOutput(
+          '✅ SerpAPI key configured successfully!\n\n' +
+          'SerpAPI provides access to:\n' +
+          '- Google Search with 99.95% SLA\n' +
+          '- Google Images and reverse image search\n' +
+          '- Global location-based search results\n' +
+          '- CAPTCHA solving and legal protection\n\n' +
+          'Used by: zenode:visit tool\n' +
+          'Test your configuration with: `zenode:config validate`',
+          'success'
+        );
+
       default:
         throw new Error(`Unknown provider: ${args.provider}`);
     }
@@ -238,6 +290,9 @@ Remember: The goal is to get users up and running quickly with at least one work
         'GEMINI_API_KEY',
         'OPENAI_API_KEY', 
         'OPENROUTER_API_KEY',
+        'BROWSERBASE_API_KEY',
+        'SEARCHAPI_KEY',
+        'SERPAPI_KEY',
         'CUSTOM_API_URL',
         'CUSTOM_API_KEY',
         'CUSTOM_MODEL_NAME'
@@ -311,6 +366,21 @@ Remember: The goal is to get users up and running quickly with at least one work
           customKey = trimmed.split('=', 2)[1] || '';
         } else if (trimmed.startsWith('CUSTOM_MODEL_NAME=')) {
           customModel = trimmed.split('=', 2)[1] || '';
+        } else if (trimmed.startsWith('BROWSERBASE_API_KEY=')) {
+          const value = trimmed.split('=', 2)[1];
+          if (value && value !== 'your_browserbase_api_key_here') {
+            config.browserbase = value;
+          }
+        } else if (trimmed.startsWith('SEARCHAPI_KEY=')) {
+          const value = trimmed.split('=', 2)[1];
+          if (value && value !== 'your_searchapi_key_here') {
+            config.searchapi = value;
+          }
+        } else if (trimmed.startsWith('SERPAPI_KEY=')) {
+          const value = trimmed.split('=', 2)[1];
+          if (value && value !== 'your_serpapi_key_here') {
+            config.serpapi = value;
+          }
         }
       }
       
@@ -414,6 +484,28 @@ Remember: The goal is to get users up and running quickly with at least one work
       providers.push(`✅ **Custom** - Configured (${config.custom.url}, model: ${config.custom.model})`);
     } else {
       providers.push('❌ **Custom** - Not configured');
+    }
+    
+    // Optional providers for visitor tool
+    providers.push(''); // Add separator
+    providers.push('### Optional APIs (for zenode:visitor tool)');
+    
+    if (config.browserbase) {
+      providers.push('✅ **Browserbase** - Configured (browser automation available)');
+    } else {
+      providers.push('⚪ **Browserbase** - Not configured (browser automation disabled)');
+    }
+    
+    if (config.searchapi) {
+      providers.push('✅ **SearchAPI** - Configured (Google/Bing search available)');
+    } else {
+      providers.push('⚪ **SearchAPI** - Not configured (alternative search disabled)');
+    }
+    
+    if (config.serpapi) {
+      providers.push('✅ **SerpAPI** - Configured (Google search + reverse image search available)');
+    } else {
+      providers.push('⚪ **SerpAPI** - Not configured (reverse image search disabled)');
     }
     
     const configuredCount = [config.gemini, config.openai, config.openrouter, config.custom].filter(Boolean).length;
@@ -677,5 +769,140 @@ For authentication-required endpoints:
 ## Testing
 After setup, test with:
 \`zenode:chat "Hello from my local model!"\``;
+  }
+
+  /**
+   * Get Browserbase-specific setup instructions
+   */
+  private getBrowserbaseSetupInstructions(): string {
+    return `# Browserbase API Setup
+
+## Step 1: Get Your API Key
+1. Visit: https://www.browserbase.com/
+2. Sign up for an account
+3. Access your dashboard to get your API key
+4. Copy the API key (starts with bb_live_)
+
+## Step 2: Configure Zenode
+Run this command with your actual API key:
+\`zenode:config setup --provider browserbase --api_key YOUR_ACTUAL_KEY_HERE\`
+
+## What You'll Get
+- **Scalable browser automation** - 1000s of browsers in milliseconds
+- **Headless browsing** - Playwright, Puppeteer, Selenium support
+- **Web scraping capabilities** - With CAPTCHA solving
+- **Global proxy network** - 4 vCPUs per browser instance
+- **Screenshot and file handling** - For visual analysis tasks
+
+## Used By
+- **zenode:visit** tool for advanced web browsing and scraping
+
+## Key Features
+- SOC-2 Type 1 and HIPAA compliant
+- Live View iFrame for real-time monitoring
+- Browser session recording
+- Residential proxy support
+- Configurable browser fingerprinting
+
+## Example Usage
+After setup, try:
+\`zenode:visit "Take a screenshot of google.com and analyze the layout"\`
+\`zenode:visit "Scrape the latest news from techcrunch.com"\`
+
+## Pricing
+- Check https://www.browserbase.com/ for current pricing
+- Pay-per-use model for browser sessions`;
+  }
+
+  /**
+   * Get SearchAPI-specific setup instructions
+   */
+  private getSearchAPISetupInstructions(): string {
+    return `# SearchAPI Setup
+
+## Step 1: Get Your API Key
+1. Visit: https://www.searchapi.io/
+2. Create an account
+3. Access your dashboard
+4. Generate your API key
+
+## Step 2: Configure Zenode
+Run this command with your actual API key:
+\`zenode:config setup --provider searchapi --api_key YOUR_ACTUAL_KEY_HERE\`
+
+## What You'll Get
+- **Multi-engine search** - Google, Bing, YouTube, Amazon
+- **Real-time SERP data** - Organic results, ads, knowledge graph
+- **Sub-2 second response** - Global proxy network
+- **99.9% success rate** - Advanced CAPTCHA solving
+- **Geo-targeting** - Precise coordinate-level location targeting
+
+## Used By
+- **zenode:visit** tool for comprehensive search tasks
+
+## Key Features
+- Pay only for successful searches
+- U.S. Legal Shield protection
+- Rich snippet extraction
+- Related searches and knowledge graph data
+- Team management and collaboration tools
+
+## Example Usage
+After setup, try:
+\`zenode:visit "Search for latest AI developments on Google"\`
+\`zenode:visit "Find YouTube videos about Node.js tutorials"\`
+
+## Pricing
+- Tiered plans: $4 to $5,000 per month
+- Based on search volume (1,000 to 5,000,000 searches)
+- Free trial available`;
+  }
+
+  /**
+   * Get SerpAPI-specific setup instructions
+   */
+  private getSerpAPISetupInstructions(): string {
+    return `# SerpAPI Setup
+
+## Step 1: Get Your API Key
+1. Visit: https://serpapi.com/
+2. Sign up for an account
+3. Access your dashboard
+4. Copy your API key
+
+## Step 2: Configure Zenode
+Run this command with your actual API key:
+\`zenode:config setup --provider serpapi --api_key YOUR_ACTUAL_KEY_HERE\`
+
+## What You'll Get
+- **Google Search API** - Real-time search results with 99.95% SLA
+- **Google Images API** - Reverse image search capabilities
+- **Global location search** - Location-specific results
+- **CAPTCHA solving** - Automatic handling
+- **Legal protection** - U.S. Legal Shield included
+
+## Used By
+- **zenode:visit** tool for Google search and reverse image search
+
+## Key Features
+- 100 free searches per month
+- Global proxy infrastructure
+- Structured JSON results
+- Maps, local listings, shopping results
+- Knowledge Graph data extraction
+
+## Example Usage
+After setup, try:
+\`zenode:visit "Reverse search this image: https://example.com/image.jpg"\`
+\`zenode:visit "Search Google for 'best restaurants in Tokyo'"\`
+
+## Pricing
+- **Free**: 100 searches/month
+- **Developer**: $75/month (5,000 searches)
+- **Production**: $150/month (15,000 searches)
+- **Big Data**: $275/month (30,000 searches)
+
+## Supported Engines
+Google, Bing, DuckDuckGo, Yandex, YouTube, Amazon, and many more`;
   }
 }

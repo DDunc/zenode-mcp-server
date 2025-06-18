@@ -13,5 +13,16 @@
   "server": {
     "requestTimeout": 30000,
     "maxConcurrentRequests": 10
+  },
+  "apis": {
+    "browserbase": {
+      "apiKey": "${BROWSERBASE_API_KEY}"
+    },
+    "searchapi": {
+      "apiKey": "${SEARCHAPI_KEY}"
+    },
+    "serpapi": {
+      "apiKey": "${SERPAPI_KEY}"
+    }
   }
 }

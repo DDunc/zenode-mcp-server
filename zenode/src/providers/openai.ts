@@ -15,6 +15,7 @@ import {
   ModelCapabilities,
   Message,
 } from '../types/providers.js';
+import { ImageCapabilities } from '../types/images.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -183,5 +184,59 @@ export class OpenAIProvider extends BaseModelProvider {
     } catch (error) {
       this.handleApiError(error, modelName);
     }
+  }
+
+  /**
+   * Get image capabilities for OpenAI models
+   */
+  async getImageCapabilities(modelName: string): Promise<ImageCapabilities> {
+    const resolvedName = this.resolveModelAlias(modelName) || modelName;
+    
+    // OpenAI vision models and their limits
+    const visionModels = new Set([
+      'gpt-4o',
+      'gpt-4o-mini', 
+      'gpt-4-vision-preview',
+      'o3',
+      'o3-mini',
+      'o3-mini-high',
+      'o3-pro',
+      'o4-mini',
+      'o4-mini-high',
+    ]);
+
+    if (visionModels.has(resolvedName)) {
+      return {
+        supportsImages: true,
+        maxImageSizeMB: 20, // OpenAI limit for vision models
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      };
+    }
+
+    // Non-vision models
+    return {
+      supportsImages: false,
+      maxImageSizeMB: 0,
+      supportedFormats: [],
+    };
+  }
+
+  /**
+   * Handle OpenAI API errors
+   */
+  protected handleApiError(error: any, modelName: string): never {
+    logger.error(`OpenAI API error for model ${modelName}:`, error);
+    
+    if (error.code === 'insufficient_quota') {
+      throw new Error('OpenAI API quota exceeded. Please check your billing and usage limits.');
+    } else if (error.code === 'invalid_api_key') {
+      throw new Error('Invalid OpenAI API key. Please check your OPENAI_API_KEY environment variable.');
+    } else if (error.code === 'model_not_found') {
+      throw new Error(`OpenAI model '${modelName}' not found or not accessible with your API key.`);
+    } else if (error.code === 'rate_limit_exceeded') {
+      throw new Error('OpenAI API rate limit exceeded. Please try again later.');
+    }
+    
+    throw new Error(`OpenAI API error: ${error.message || 'Unknown error'}`);
   }
 }

@@ -86,8 +86,8 @@ export class AnalyzeTool extends BaseTool {
       // Prepare the prompt
       const fullPrompt = await this.preparePrompt(validatedRequest);
       
-      // Select model
-      const model = await this.selectModel(validatedRequest.model);
+      // Select model (with automatic vision model selection if images present)
+      const model = await this.selectModel(validatedRequest.model, undefined, !!validatedRequest.images?.length);
       
       // Get conversation context if continuing
       let conversationContext: string | undefined;

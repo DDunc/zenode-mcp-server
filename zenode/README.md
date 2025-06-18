@@ -91,7 +91,7 @@ This unusual folder structure is temporary but beneficial for LLM and agent-assi
 
 ## Features
 
-- **7 Specialized AI Tools**: Chat, deep thinking, code review, pre-commit validation, debugging, analysis, and test generation
+- **9 Specialized AI Tools**: Chat, deep thinking, code review, pre-commit validation, debugging, analysis, test generation, web browsing, and configuration
 - **Multi-Provider Support**: Seamlessly work with Google Gemini, OpenAI, OpenRouter, and custom endpoints
 - **Conversation Threading**: Maintain context across multiple tool calls with Redis-based persistence
 - **Extended Thinking Modes**: Allocate computational resources based on task complexity
@@ -112,6 +112,11 @@ At least one of the following API configurations is required:
 - OpenAI API key
 - OpenRouter API key
 - Custom API endpoint (for local models like Ollama)
+
+### Optional API Keys
+- Browserbase API key (for browser automation via zenode:visit)
+- SearchAPI key (for multi-engine search via zenode:visit)  
+- SerpAPI key (for Google search and reverse image search via zenode:visit)
 
 ### Platform Support
 
@@ -156,6 +161,11 @@ cp .env.example .env
 GEMINI_API_KEY=your_gemini_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
 OPENROUTER_API_KEY=your_openrouter_api_key_here
+
+# Optional: Web browsing and search APIs for zenode:visit tool
+BROWSERBASE_API_KEY=your_browserbase_api_key_here
+SEARCHAPI_KEY=your_searchapi_key_here
+SERPAPI_KEY=your_serpapi_key_here
 
 # Optional: Custom endpoint for local models
 CUSTOM_API_URL=http://localhost:11434
@@ -238,6 +248,9 @@ zenode:config reset
 | `GEMINI_API_KEY` | Google Gemini API key | One of these | - |
 | `OPENAI_API_KEY` | OpenAI API key | is required | - |
 | `OPENROUTER_API_KEY` | OpenRouter API key | | - |
+| `BROWSERBASE_API_KEY` | Browserbase API key for browser automation | No | - |
+| `SEARCHAPI_KEY` | SearchAPI key for multi-engine search | No | - |
+| `SERPAPI_KEY` | SerpAPI key for Google search and reverse image search | No | - |
 | `CUSTOM_API_URL` | Custom model endpoint | | - |
 | `CUSTOM_API_KEY` | Custom endpoint API key | No | - |
 | `CUSTOM_MODEL_NAME` | Default custom model | No | llama3.2 |
@@ -351,7 +364,15 @@ Local file access bridge for containerized tools
 @zenode.gopher "Read and analyze project structure"
 ```
 
-#### 9. Config
+#### 9. Visit
+Web browsing, search, and reverse image search with optional APIs
+```
+@zenode.visit "Reverse search this image: https://example.com/image.jpg"
+@zenode.visit "Search for latest AI developments"
+@zenode.visit "Take a screenshot of google.com"
+```
+
+#### 10. Config
 Interactive CLI configuration for API keys and settings
 ```
 @zenode.config "setup"

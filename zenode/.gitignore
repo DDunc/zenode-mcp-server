@@ -85,6 +85,7 @@ pnpm-lock.yaml
 .zenode/
 *.zenode/
 .zenode-*/
+zenode-config.json
 
 # Zenode conversation logs
 conversation-logs/
