@@ -196,24 +196,8 @@ class GeminiModelProvider(ModelProvider):
             except Exception as e:
                 last_exception = e
 
-                # Check if this is a retryable error
-                error_str = str(e).lower()
-                is_retryable = any(
-                    term in error_str
-                    for term in [
-                        "timeout",
-                        "connection",
-                        "network",
-                        "temporary",
-                        "unavailable",
-                        "retry",
-                        "429",
-                        "500",
-                        "502",
-                        "503",
-                        "504",
-                    ]
-                )
+                # Check if this is a retryable error using structured error codes
+                is_retryable = self._is_error_retryable(e)
 
                 # If this is the last attempt or not retryable, give up
                 if attempt == max_retries - 1 or not is_retryable:
@@ -287,6 +271,56 @@ class GeminiModelProvider(ModelProvider):
 
         return int(max_thinking_tokens * self.THINKING_BUDGETS[thinking_mode])
 
+    def list_models(self, respect_restrictions: bool = True) -> list[str]:
+        """Return a list of model names supported by this provider.
+
+        Args:
+            respect_restrictions: Whether to apply provider-specific restriction logic.
+
+        Returns:
+            List of model names available from this provider
+        """
+        from utils.model_restrictions import get_restriction_service
+
+        restriction_service = get_restriction_service() if respect_restrictions else None
+        models = []
+
+        for model_name, config in self.SUPPORTED_MODELS.items():
+            # Handle both base models (dict configs) and aliases (string values)
+            if isinstance(config, str):
+                # This is an alias - check if the target model would be allowed
+                target_model = config
+                if restriction_service and not restriction_service.is_allowed(self.get_provider_type(), target_model):
+                    continue
+                # Allow the alias
+                models.append(model_name)
+            else:
+                # This is a base model with config dict
+                # Check restrictions if enabled
+                if restriction_service and not restriction_service.is_allowed(self.get_provider_type(), model_name):
+                    continue
+                models.append(model_name)
+
+        return models
+
+    def list_all_known_models(self) -> list[str]:
+        """Return all model names known by this provider, including alias targets.
+
+        Returns:
+            List of all model names and alias targets known by this provider
+        """
+        all_models = set()
+
+        for model_name, config in self.SUPPORTED_MODELS.items():
+            # Add the model name itself
+            all_models.add(model_name.lower())
+
+            # If it's an alias (string value), add the target model too
+            if isinstance(config, str):
+                all_models.add(config.lower())
+
+        return list(all_models)
+
     def _resolve_model_name(self, model_name: str) -> str:
         """Resolve model shorthand to full name."""
         # Check if it's a shorthand
@@ -303,12 +337,26 @@ class GeminiModelProvider(ModelProvider):
         # Note: The actual structure depends on the SDK version and response format
         if hasattr(response, "usage_metadata"):
             metadata = response.usage_metadata
+
+            # Extract token counts with explicit None checks
+            input_tokens = None
+            output_tokens = None
+
             if hasattr(metadata, "prompt_token_count"):
-                usage["input_tokens"] = metadata.prompt_token_count
+                value = metadata.prompt_token_count
+                if value is not None:
+                    input_tokens = value
+                    usage["input_tokens"] = value
+
             if hasattr(metadata, "candidates_token_count"):
-                usage["output_tokens"] = metadata.candidates_token_count
-            if "input_tokens" in usage and "output_tokens" in usage:
-                usage["total_tokens"] = usage["input_tokens"] + usage["output_tokens"]
+                value = metadata.candidates_token_count
+                if value is not None:
+                    output_tokens = value
+                    usage["output_tokens"] = value
+
+            # Calculate total only if both values are available and valid
+            if input_tokens is not None and output_tokens is not None:
+                usage["total_tokens"] = input_tokens + output_tokens
 
         return usage
 
@@ -324,6 +372,78 @@ class GeminiModelProvider(ModelProvider):
         }
         return model_name in vision_models
 
+    def _is_error_retryable(self, error: Exception) -> bool:
+        """Determine if an error should be retried based on structured error codes.
+
+        Uses Gemini API error structure instead of text pattern matching for reliability.
+
+        Args:
+            error: Exception from Gemini API call
+
+        Returns:
+            True if error should be retried, False otherwise
+        """
+        error_str = str(error).lower()
+
+        # Check for 429 errors first - these need special handling
+        if "429" in error_str or "quota" in error_str or "resource_exhausted" in error_str:
+            # For Gemini, check for specific non-retryable error indicators
+            # These typically indicate permanent failures or quota/size limits
+            non_retryable_indicators = [
+                "quota exceeded",
+                "resource exhausted",
+                "context length",
+                "token limit",
+                "request too large",
+                "invalid request",
+                "quota_exceeded",
+                "resource_exhausted",
+            ]
+
+            # Also check if this is a structured error from Gemini SDK
+            try:
+                # Try to access error details if available
+                if hasattr(error, "details") or hasattr(error, "reason"):
+                    # Gemini API errors may have structured details
+                    error_details = getattr(error, "details", "") or getattr(error, "reason", "")
+                    error_details_str = str(error_details).lower()
+
+                    # Check for non-retryable error codes/reasons
+                    if any(indicator in error_details_str for indicator in non_retryable_indicators):
+                        logger.debug(f"Non-retryable Gemini error: {error_details}")
+                        return False
+            except Exception:
+                pass
+
+            # Check main error string for non-retryable patterns
+            if any(indicator in error_str for indicator in non_retryable_indicators):
+                logger.debug(f"Non-retryable Gemini error based on message: {error_str[:200]}...")
+                return False
+
+            # If it's a 429/quota error but doesn't match non-retryable patterns, it might be retryable rate limiting
+            logger.debug(f"Retryable Gemini rate limiting error: {error_str[:100]}...")
+            return True
+
+        # For non-429 errors, check if they're retryable
+        retryable_indicators = [
+            "timeout",
+            "connection",
+            "network",
+            "temporary",
+            "unavailable",
+            "retry",
+            "internal error",
+            "408",  # Request timeout
+            "500",  # Internal server error
+            "502",  # Bad gateway
+            "503",  # Service unavailable
+            "504",  # Gateway timeout
+            "ssl",  # SSL errors
+            "handshake",  # Handshake failures
+        ]
+
+        return any(indicator in error_str for indicator in retryable_indicators)
+
     def _process_image(self, image_path: str) -> Optional[dict]:
         """Process an image for Gemini API."""
         try:
@@ -333,19 +453,12 @@ class GeminiModelProvider(ModelProvider):
                 mime_type = header.split(";")[0].split(":")[1]
                 return {"inline_data": {"mime_type": mime_type, "data": data}}
             else:
-                # Handle file path - translate for Docker environment
+                # Handle file path
                 from utils.file_types import get_image_mime_type
-                from utils.file_utils import translate_path_for_environment
 
-                translated_path = translate_path_for_environment(image_path)
-                logger.debug(f"Translated image path from '{image_path}' to '{translated_path}'")
-
-                if not os.path.exists(translated_path):
-                    logger.warning(f"Image file not found: {translated_path} (original: {image_path})")
+                if not os.path.exists(image_path):
+                    logger.warning(f"Image file not found: {image_path}")
                     return None
-
-                # Use translated path for all subsequent operations
-                image_path = translated_path
 
                 # Detect MIME type from file extension using centralized mappings
                 ext = os.path.splitext(image_path)[1].lower()

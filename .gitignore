@@ -183,8 +183,15 @@ node_modules/
 package-lock.json
 npm-debug.log*
 
-# Security files  
-SECURITY-AUDIT-RESULTS.md
-*.key
-**/api-keys/
-**/secrets/
+# Temporary files
+/tmp/
+
+# Local user instructions
+CLAUDE.local.md
+
+# Standalone mode files
+.zen_venv/
+.docker_cleaned
+logs/
+*.backup
+/.desktop_configured

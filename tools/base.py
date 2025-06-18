@@ -31,12 +31,13 @@ from providers.base import ProviderType
 from utils import check_token_limit
 from utils.conversation_memory import (
     MAX_CONVERSATION_TURNS,
+    ConversationTurn,
     add_turn,
     create_thread,
     get_conversation_file_list,
     get_thread,
 )
-from utils.file_utils import read_file_content, read_files, translate_path_for_environment
+from utils.file_utils import read_file_content, read_files
 
 from .models import SPECIAL_STATUS_MODELS, ContinuationOffer, ToolOutput
 
@@ -88,7 +89,7 @@ class ToolRequest(BaseModel):
     images: Optional[list[str]] = Field(
         None,
         description=(
-            "Optional image(s) for visual context. Accepts absolute file paths or "
+            "Optional image(s) for visual context. Accepts absolute file paths (must be FULL absolute paths to real files / folders - DO NOT SHORTEN) or "
             "base64 data URLs. Only provide when user explicitly mentions images. "
             "When including images, please describe what you believe each image contains "
             "(e.g., 'screenshot of error dialog', 'architecture diagram', 'code snippet') "
@@ -643,6 +644,41 @@ class BaseTool(ABC):
             )
             return requested_files
 
+    def format_conversation_turn(self, turn: ConversationTurn) -> list[str]:
+        """
+        Format a conversation turn for display in conversation history.
+
+        Tools can override this to provide custom formatting for their responses
+        while maintaining the standard structure for cross-tool compatibility.
+
+        This method is called by build_conversation_history when reconstructing
+        conversation context, allowing each tool to control how its responses
+        appear in subsequent conversation turns.
+
+        Args:
+            turn: The conversation turn to format (from utils.conversation_memory)
+
+        Returns:
+            list[str]: Lines of formatted content for this turn
+
+        Example:
+            Default implementation returns:
+            ["Files used in this turn: file1.py, file2.py", "", "Response content..."]
+
+            Tools can override to add custom sections, formatting, or metadata display.
+        """
+        parts = []
+
+        # Add files context if present
+        if turn.files:
+            parts.append(f"Files used in this turn: {', '.join(turn.files)}")
+            parts.append("")  # Empty line for readability
+
+        # Add the actual content
+        parts.append(turn.content)
+
+        return parts
+
     def _prepare_file_content_for_prompt(
         self,
         request_files: list[str],
@@ -716,109 +752,35 @@ class BaseTool(ABC):
         elif max_tokens is not None:
             effective_max_tokens = max_tokens - reserve_tokens
         else:
-            # Get model-specific limits
-            # First check if model_context was passed from server.py
-            model_context = None
-            if arguments:
-                model_context = arguments.get("_model_context") or getattr(self, "_current_arguments", {}).get(
-                    "_model_context"
+            # The execute() method is responsible for setting self._model_context.
+            # A missing context is a programming error, not a fallback case.
+            if not hasattr(self, "_model_context") or not self._model_context:
+                logger.error(
+                    f"[FILES] {self.name}: _prepare_file_content_for_prompt called without a valid model context. "
+                    "This indicates an incorrect call sequence in the tool's implementation."
                 )
+                # Fail fast to reveal integration issues. A silent fallback with arbitrary
+                # limits can hide bugs and lead to unexpected token usage or silent failures.
+                raise RuntimeError("ModelContext not initialized before file preparation.")
 
-            if model_context:
-                # Use the passed model context
-                try:
-                    token_allocation = model_context.calculate_token_allocation()
-                    effective_max_tokens = token_allocation.file_tokens - reserve_tokens
-                    logger.debug(
-                        f"[FILES] {self.name}: Using passed model context for {model_context.model_name}: "
-                        f"{token_allocation.file_tokens:,} file tokens from {token_allocation.total_tokens:,} total"
-                    )
-                except Exception as e:
-                    logger.warning(f"[FILES] {self.name}: Error using passed model context: {e}")
-                    # Fall through to manual calculation
-                    model_context = None
-
-            if not model_context:
-                # Manual calculation as fallback
-                from config import DEFAULT_MODEL
-
-                model_name = getattr(self, "_current_model_name", None) or DEFAULT_MODEL
-
-                # Handle auto mode gracefully
-                if model_name.lower() == "auto":
-                    from providers.registry import ModelProviderRegistry
-
-                    # Use tool-specific fallback model for capacity estimation
-                    # This properly handles different providers (OpenAI=200K, Gemini=1M)
-                    tool_category = self.get_model_category()
-                    fallback_model = ModelProviderRegistry.get_preferred_fallback_model(tool_category)
-                    logger.debug(
-                        f"[FILES] {self.name}: Auto mode detected, using {fallback_model} "
-                        f"for {tool_category.value} tool capacity estimation"
-                    )
-
-                    try:
-                        provider = self.get_model_provider(fallback_model)
-                        capabilities = provider.get_capabilities(fallback_model)
-
-                        # Calculate content allocation based on model capacity
-                        if capabilities.context_window < 300_000:
-                            # Smaller context models: 60% content, 40% response
-                            model_content_tokens = int(capabilities.context_window * 0.6)
-                        else:
-                            # Larger context models: 80% content, 20% response
-                            model_content_tokens = int(capabilities.context_window * 0.8)
-
-                        effective_max_tokens = model_content_tokens - reserve_tokens
-                        logger.debug(
-                            f"[FILES] {self.name}: Using {fallback_model} capacity for auto mode: "
-                            f"{model_content_tokens:,} content tokens from {capabilities.context_window:,} total"
-                        )
-                    except (ValueError, AttributeError) as e:
-                        # Handle specific errors: provider not found, model not supported, missing attributes
-                        logger.warning(
-                            f"[FILES] {self.name}: Could not get capabilities for fallback model {fallback_model}: {type(e).__name__}: {e}"
-                        )
-                        # Fall back to conservative default for safety
-                        effective_max_tokens = 100_000 - reserve_tokens
-                    except Exception as e:
-                        # Catch any other unexpected errors
-                        logger.error(
-                            f"[FILES] {self.name}: Unexpected error getting model capabilities: {type(e).__name__}: {e}"
-                        )
-                        effective_max_tokens = 100_000 - reserve_tokens
-                else:
-                    # Normal mode - use the specified model
-                    try:
-                        provider = self.get_model_provider(model_name)
-                        capabilities = provider.get_capabilities(model_name)
-
-                        # Calculate content allocation based on model capacity
-                        if capabilities.context_window < 300_000:
-                            # Smaller context models: 60% content, 40% response
-                            model_content_tokens = int(capabilities.context_window * 0.6)
-                        else:
-                            # Larger context models: 80% content, 20% response
-                            model_content_tokens = int(capabilities.context_window * 0.8)
-
-                        effective_max_tokens = model_content_tokens - reserve_tokens
-                        logger.debug(
-                            f"[FILES] {self.name}: Using model-specific limit for {model_name}: "
-                            f"{model_content_tokens:,} content tokens from {capabilities.context_window:,} total"
-                        )
-                    except (ValueError, AttributeError) as e:
-                        # Handle specific errors: provider not found, model not supported, missing attributes
-                        logger.warning(
-                            f"[FILES] {self.name}: Could not get model capabilities for {model_name}: {type(e).__name__}: {e}"
-                        )
-                        # Fall back to conservative default for safety
-                        effective_max_tokens = 100_000 - reserve_tokens
-                    except Exception as e:
-                        # Catch any other unexpected errors
-                        logger.error(
-                            f"[FILES] {self.name}: Unexpected error getting model capabilities: {type(e).__name__}: {e}"
-                        )
-                        effective_max_tokens = 100_000 - reserve_tokens
+            # This is now the single source of truth for token allocation.
+            model_context = self._model_context
+            try:
+                token_allocation = model_context.calculate_token_allocation()
+                # Standardize on `file_tokens` for consistency and correctness.
+                # This fixes the bug where the old code incorrectly used content_tokens
+                effective_max_tokens = token_allocation.file_tokens - reserve_tokens
+                logger.debug(
+                    f"[FILES] {self.name}: Using model context for {model_context.model_name}: "
+                    f"{token_allocation.file_tokens:,} file tokens from {token_allocation.total_tokens:,} total"
+                )
+            except Exception as e:
+                logger.error(
+                    f"[FILES] {self.name}: Failed to calculate token allocation from model context: {e}", exc_info=True
+                )
+                # If the context exists but calculation fails, we still need to prevent a crash.
+                # A loud error is logged, and we fall back to a safe default.
+                effective_max_tokens = 100_000 - reserve_tokens
 
         # Ensure we have a reasonable minimum budget
         effective_max_tokens = max(1000, effective_max_tokens)
@@ -993,18 +955,18 @@ When recommending searches, be specific about what information you need and why 
             for file_path in request.files:
                 if not os.path.isabs(file_path):
                     return (
-                        f"Error: All file paths must be absolute. "
+                        f"Error: All file paths must be FULL absolute paths to real files / folders - DO NOT SHORTEN. "
                         f"Received relative path: {file_path}\n"
-                        f"Please provide the full absolute path starting with '/'"
+                        f"Please provide the full absolute path starting with '/' (must be FULL absolute paths to real files / folders - DO NOT SHORTEN)"
                     )
 
         # Check if request has 'path' attribute (used by review_changes tool)
         if hasattr(request, "path") and request.path:
             if not os.path.isabs(request.path):
                 return (
-                    f"Error: Path must be absolute. "
+                    f"Error: Path must be FULL absolute paths to real files / folders - DO NOT SHORTEN. "
                     f"Received relative path: {request.path}\n"
-                    f"Please provide the full absolute path starting with '/'"
+                    f"Please provide the full absolute path starting with '/' (must be FULL absolute paths to real files / folders - DO NOT SHORTEN)"
                 )
 
         return None
@@ -1052,7 +1014,7 @@ When recommending searches, be specific about what information you need and why 
                     f"MANDATORY ACTION REQUIRED: The prompt is too large for MCP's token limits (>{MCP_PROMPT_SIZE_LIMIT:,} characters). "
                     "YOU MUST IMMEDIATELY save the prompt text to a temporary file named 'prompt.txt' in the working directory. "
                     "DO NOT attempt to shorten or modify the prompt. SAVE IT AS-IS to 'prompt.txt'. "
-                    "Then resend the request with the absolute file path to 'prompt.txt' in the files parameter, "
+                    "Then resend the request with the absolute file path to 'prompt.txt' in the files parameter (must be FULL absolute path - DO NOT SHORTEN), "
                     "along with any other files you wish to share as context. Leave the prompt text itself empty or very brief in the new request. "
                     "This is the ONLY way to handle large prompts - you MUST follow these exact steps."
                 ),
@@ -1087,8 +1049,14 @@ When recommending searches, be specific about what information you need and why 
 
         # Get model capabilities to check image support and size limits
         try:
-            provider = self.get_model_provider(model_name)
-            capabilities = provider.get_capabilities(model_name)
+            # Use the already-resolved provider from model context if available
+            if hasattr(self, "_model_context") and self._model_context:
+                provider = self._model_context.provider
+                capabilities = self._model_context.capabilities
+            else:
+                # Fallback for edge cases (e.g., direct test calls)
+                provider = self.get_model_provider(model_name)
+                capabilities = provider.get_capabilities(model_name)
         except Exception as e:
             logger.warning(f"Failed to get capabilities for model {model_name}: {e}")
             # Fall back to checking custom models configuration
@@ -1214,7 +1182,7 @@ When recommending searches, be specific about what information you need and why 
 
         return estimate_file_tokens(file_path)
 
-    def check_total_file_size(self, files: list[str]) -> Optional[dict[str, Any]]:
+    def check_total_file_size(self, files: list[str], model_name: str) -> Optional[dict[str, Any]]:
         """
         Check if total file sizes would exceed token threshold before embedding.
 
@@ -1224,19 +1192,13 @@ When recommending searches, be specific about what information you need and why 
 
         Args:
             files: List of file paths to check
+            model_name: The resolved model name to use for token limits
 
         Returns:
             Dict with `code_too_large` response if too large, None if acceptable
         """
         if not files:
             return None
-
-        # Get current model name for context-aware thresholds
-        model_name = getattr(self, "_current_model_name", None)
-        if not model_name:
-            from config import DEFAULT_MODEL
-
-            model_name = DEFAULT_MODEL
 
         # Use centralized file size checking with model context
         from utils.file_utils import check_total_file_size as check_file_size_utility
@@ -1267,15 +1229,13 @@ When recommending searches, be specific about what information you need and why 
         updated_files = []
 
         for file_path in files:
-            # Translate path for current environment (Docker/direct)
-            translated_path = translate_path_for_environment(file_path)
 
             # Check if the filename is exactly "prompt.txt"
             # This ensures we don't match files like "myprompt.txt" or "prompt.txt.bak"
-            if os.path.basename(translated_path) == "prompt.txt":
+            if os.path.basename(file_path) == "prompt.txt":
                 try:
                     # Read prompt.txt content and extract just the text
-                    content, _ = read_file_content(translated_path)
+                    content, _ = read_file_content(file_path)
                     # Extract the content between the file markers
                     if "--- BEGIN FILE:" in content and "--- END FILE:" in content:
                         lines = content.split("\n")
@@ -1353,6 +1313,65 @@ When recommending searches, be specific about what information you need and why 
             # Extract and validate images from request
             images = getattr(request, "images", None) or []
 
+            # MODEL RESOLUTION NOW HAPPENS AT MCP BOUNDARY
+            # Extract pre-resolved model context from server.py
+            model_context = self._current_arguments.get("_model_context")
+            resolved_model_name = self._current_arguments.get("_resolved_model_name")
+
+            if model_context and resolved_model_name:
+                # Model was already resolved at MCP boundary
+                model_name = resolved_model_name
+                logger.debug(f"Using pre-resolved model '{model_name}' from MCP boundary")
+            else:
+                # Fallback for direct execute calls
+                model_name = getattr(request, "model", None)
+                if not model_name:
+                    from config import DEFAULT_MODEL
+
+                    model_name = DEFAULT_MODEL
+                logger.debug(f"Using fallback model resolution for '{model_name}' (test mode)")
+
+                # For tests: Check if we should require model selection (auto mode)
+                if self._should_require_model_selection(model_name):
+                    # Get suggested model based on tool category
+                    from providers.registry import ModelProviderRegistry
+
+                    tool_category = self.get_model_category()
+                    suggested_model = ModelProviderRegistry.get_preferred_fallback_model(tool_category)
+
+                    # Build error message based on why selection is required
+                    if model_name.lower() == "auto":
+                        error_message = (
+                            f"Model parameter is required in auto mode. "
+                            f"Suggested model for {self.name}: '{suggested_model}' "
+                            f"(category: {tool_category.value})"
+                        )
+                    else:
+                        # Model was specified but not available
+                        available_models = self._get_available_models()
+
+                        error_message = (
+                            f"Model '{model_name}' is not available with current API keys. "
+                            f"Available models: {', '.join(available_models)}. "
+                            f"Suggested model for {self.name}: '{suggested_model}' "
+                            f"(category: {tool_category.value})"
+                        )
+                    error_output = ToolOutput(
+                        status="error",
+                        content=error_message,
+                        content_type="text",
+                    )
+                    return [TextContent(type="text", text=error_output.model_dump_json())]
+
+                # Create model context for tests
+                from utils.model_context import ModelContext
+
+                model_context = ModelContext(model_name)
+
+            # Store resolved model name for use by helper methods
+            self._current_model_name = model_name
+            self._model_context = model_context
+
             # Check if we have continuation_id - if so, conversation history is already embedded
             continuation_id = getattr(request, "continuation_id", None)
 
@@ -1389,57 +1408,11 @@ When recommending searches, be specific about what information you need and why 
                 prompt = f"{prompt}\n\n{follow_up_instructions}"
                 logger.debug(f"Added follow-up instructions for new {self.name} conversation")
 
-            # Extract model configuration from request or use defaults
-            model_name = getattr(request, "model", None)
-            if not model_name:
-                from config import DEFAULT_MODEL
-
-                model_name = DEFAULT_MODEL
-
-            # Check if we need Claude to select a model
-            # This happens when:
-            # 1. The model is explicitly "auto"
-            # 2. The requested model is not available
-            if self._should_require_model_selection(model_name):
-                # Get suggested model based on tool category
-                from providers.registry import ModelProviderRegistry
-
-                tool_category = self.get_model_category()
-                suggested_model = ModelProviderRegistry.get_preferred_fallback_model(tool_category)
-
-                # Build error message based on why selection is required
-                if model_name.lower() == "auto":
-                    error_message = (
-                        f"Model parameter is required in auto mode. "
-                        f"Suggested model for {self.name}: '{suggested_model}' "
-                        f"(category: {tool_category.value})"
-                    )
-                else:
-                    # Model was specified but not available
-                    # Get list of available models
-                    available_models = self._get_available_models()
-
-                    error_message = (
-                        f"Model '{model_name}' is not available with current API keys. "
-                        f"Available models: {', '.join(available_models)}. "
-                        f"Suggested model for {self.name}: '{suggested_model}' "
-                        f"(category: {tool_category.value})"
-                    )
-
-                error_output = ToolOutput(
-                    status="error",
-                    content=error_message,
-                    content_type="text",
-                )
-                return [TextContent(type="text", text=error_output.model_dump_json())]
-
-            # Store model name for use by helper methods like _prepare_file_content_for_prompt
-            # Only set this after auto mode validation to prevent "auto" being used as a model name
-            self._current_model_name = model_name
+            # Model name already resolved and stored in self._current_model_name earlier
 
             # Validate images at MCP boundary if any were provided
             if images:
-                image_validation_error = self._validate_image_limits(images, model_name, continuation_id)
+                image_validation_error = self._validate_image_limits(images, self._current_model_name, continuation_id)
                 if image_validation_error:
                     return [TextContent(type="text", text=json.dumps(image_validation_error))]
 
@@ -1451,10 +1424,10 @@ When recommending searches, be specific about what information you need and why 
                 thinking_mode = self.get_default_thinking_mode()
 
             # Get the appropriate model provider
-            provider = self.get_model_provider(model_name)
+            provider = self.get_model_provider(self._current_model_name)
 
             # Validate and correct temperature for this model
-            temperature, temp_warnings = self._validate_and_correct_temperature(model_name, temperature)
+            temperature, temp_warnings = self._validate_and_correct_temperature(self._current_model_name, temperature)
 
             # Log any temperature corrections
             for warning in temp_warnings:
@@ -1465,16 +1438,21 @@ When recommending searches, be specific about what information you need and why 
 
             # Generate AI response using the provider
             logger.info(f"Sending request to {provider.get_provider_type().value} API for {self.name}")
-            logger.info(f"Using model: {model_name} via {provider.get_provider_type().value} provider")
-            logger.debug(f"Prompt length: {len(prompt)} characters")
+            logger.info(f"Using model: {self._current_model_name} via {provider.get_provider_type().value} provider")
+
+            # Import token estimation utility
+            from utils.token_utils import estimate_tokens
+
+            estimated_tokens = estimate_tokens(prompt)
+            logger.debug(f"Prompt length: {len(prompt)} characters (~{estimated_tokens:,} tokens)")
 
             # Generate content with provider abstraction
             model_response = provider.generate_content(
                 prompt=prompt,
-                model_name=model_name,
+                model_name=self._current_model_name,
                 system_prompt=system_prompt,
                 temperature=temperature,
-                thinking_mode=thinking_mode if provider.supports_thinking_mode(model_name) else None,
+                thinking_mode=thinking_mode if provider.supports_thinking_mode(self._current_model_name) else None,
                 images=images if images else None,  # Pass images via kwargs
             )
 
@@ -1486,7 +1464,11 @@ When recommending searches, be specific about what information you need and why 
 
                 # Parse response to check for clarification requests or format output
                 # Pass model info for conversation tracking
-                model_info = {"provider": provider, "model_name": model_name, "model_response": model_response}
+                model_info = {
+                    "provider": provider,
+                    "model_name": self._current_model_name,
+                    "model_response": model_response,
+                }
                 tool_output = self._parse_response(raw_text, request, model_info)
                 logger.info(f"✅ {self.name} tool completed successfully")
 
@@ -1583,6 +1565,17 @@ When recommending searches, be specific about what information you need and why 
                         # Use Pydantic for robust validation of the special status
                         parsed_status = status_model.model_validate(potential_json)
                         logger.debug(f"{self.name} tool detected special status: {status_key}")
+
+                        # Enhance mandatory_instructions for files_required_to_continue
+                        if status_key == "files_required_to_continue" and hasattr(
+                            parsed_status, "mandatory_instructions"
+                        ):
+                            original_instructions = parsed_status.mandatory_instructions
+                            enhanced_instructions = self._enhance_mandatory_instructions(original_instructions)
+                            # Create a new model instance with enhanced instructions
+                            enhanced_data = parsed_status.model_dump()
+                            enhanced_data["mandatory_instructions"] = enhanced_instructions
+                            parsed_status = status_model.model_validate(enhanced_data)
 
                         # Extract model information for metadata
                         metadata = {
@@ -1894,8 +1887,14 @@ When recommending searches, be specific about what information you need and why 
             Tuple of (corrected_temperature, warning_messages)
         """
         try:
-            provider = self.get_model_provider(model_name)
-            capabilities = provider.get_capabilities(model_name)
+            # Use the already-resolved provider and capabilities from model context
+            if hasattr(self, "_model_context") and self._model_context:
+                capabilities = self._model_context.capabilities
+            else:
+                # Fallback for edge cases (e.g., direct test calls)
+                provider = self.get_model_provider(model_name)
+                capabilities = provider.get_capabilities(model_name)
+
             constraint = capabilities.temperature_constraint
 
             warnings = []
@@ -1946,7 +1945,7 @@ When recommending searches, be specific about what information you need and why 
             elif "gpt" in model_name.lower() or "o3" in model_name.lower():
                 # Register OpenAI provider if not already registered
                 from providers.base import ProviderType
-                from providers.openai import OpenAIModelProvider
+                from providers.openai_provider import OpenAIModelProvider
 
                 ModelProviderRegistry.register_provider(ProviderType.OPENAI, OpenAIModelProvider)
                 provider = ModelProviderRegistry.get_provider(ProviderType.OPENAI)
@@ -1958,3 +1957,28 @@ When recommending searches, be specific about what information you need and why 
             )
 
         return provider
+
+    def _enhance_mandatory_instructions(self, original_instructions: str) -> str:
+        """
+        Enhance mandatory instructions for files_required_to_continue responses.
+
+        This adds generic guidance to help Claude understand the importance
+        of providing the requested files and context.
+
+        Args:
+            original_instructions: The original instructions from the model
+
+        Returns:
+            str: Enhanced instructions with additional guidance
+        """
+        generic_guidance = (
+            "\n\nIMPORTANT GUIDANCE:\n"
+            "• The requested files are CRITICAL for providing accurate analysis\n"
+            "• Please include ALL files mentioned in the files_needed list\n"
+            "• Use FULL absolute paths to real files/folders - DO NOT SHORTEN paths - and confirm that these exist\n"
+            "• If you cannot locate specific files or the files are extremely large, think hard, study the code and provide similar/related files that might contain the needed information\n"
+            "• After providing the files, use the same tool again with the continuation_id to continue the analysis\n"
+            "• The tool cannot proceed to perform its function accurately without this additional context"
+        )
+
+        return f"{original_instructions}{generic_guidance}"
