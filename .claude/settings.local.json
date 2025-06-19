@@ -101,7 +101,8 @@
       "Bash(zenode:version)",
       "Bash(./zenode-auto-repair.sh:*)",
       "Bash(./zenode-status.sh:*)",
-      "mcp__zenode__planner"
+      "mcp__zenode__planner",
+      "Bash(git fetch:*)"
     ],
     "deny": []
   }
