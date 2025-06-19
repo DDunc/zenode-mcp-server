@@ -375,6 +375,7 @@ export abstract class BaseTool {
     continuationId?: string,
     userFiles?: string[], // Files provided by user in this turn
     processedFiles?: string[], // Files actually processed by the tool
+    originalArgs?: Record<string, any>, // zen compatibility: original request for thread creation
   ): Promise<ContinuationOffer | null> {
     try {
       let threadId: string;
@@ -394,8 +395,8 @@ export abstract class BaseTool {
           files: processedFiles, // Track files actually processed by tool
         });
       } else {
-        // Create new thread
-        threadId = await createThread(toolName, modelUsed);
+        // Create new thread (zen-compatible with initial request context)
+        threadId = await createThread(toolName, originalArgs || {});
         await addTurn(threadId, 'user', userPrompt, { 
           inputTokens, 
           tool: toolName, 

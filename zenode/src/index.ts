@@ -35,7 +35,7 @@ import winston from 'winston';
 import { modelProviderRegistry } from './providers/registry.js';
 import { BaseTool, ToolOutput } from './types/tools.js';
 import { reconstructThreadContext } from './utils/conversation-memory.js';
-import { DefaultMiddlewarePipeline, ConversationLoggerMiddleware, ToolContext } from './middleware/index.js';
+// import { DefaultMiddlewarePipeline, ToolContext } from './middleware/index.js';
 import { configLoader } from './config/loader.js';
 
 // Tool imports
@@ -90,13 +90,12 @@ const TOOLS: Record<string, BaseTool> = {
   visit: new VisitTool(), // Web browsing, search, and reverse image search
 };
 
-// Initialize middleware pipeline
-const middlewarePipeline = new DefaultMiddlewarePipeline();
-
-// Register conversation logger middleware
-// Path and settings are loaded from configuration
-const conversationLogger = new ConversationLoggerMiddleware();
-middlewarePipeline.register(conversationLogger);
+// NOTE: Middleware pipeline completely disabled due to console output conflicts
+// It was causing doubling of output when viewing /mcp tools
+// TODO: Fix console.log statements in middleware before re-enabling
+// const middlewarePipeline = new DefaultMiddlewarePipeline();
+// const conversationLogger = new ConversationLoggerMiddleware();
+// middlewarePipeline.register(conversationLogger);
 
 /**
  * Configure and validate AI providers based on available API keys.
@@ -273,17 +272,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     return await executeCoordinatedRequest(args);
   }
 
-  // Create middleware context for this request
-  const context: ToolContext = {
-    toolName: name,
-    requestId: `req-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-    timestamp: new Date(),
-    input: args,
-    conversationId: args?.continuation_id as string | undefined,
-  };
-
-  // Execute request middleware
-  await middlewarePipeline.executeRequest(context);
+  // NOTE: Middleware pipeline disabled to prevent console output doubling
+  // const context: ToolContext = {
+  //   toolName: name,
+  //   requestId: `req-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+  //   timestamp: new Date(),
+  //   input: args,
+  //   conversationId: args?.continuation_id as string | undefined,
+  // };
+  // await middlewarePipeline.executeRequest(context);
 
   try {
     // Handle thread context reconstruction if continuation_id is present
@@ -317,15 +314,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
 
-    // Execute response middleware with successful result
-    await middlewarePipeline.executeResponse(context, result);
+    // NOTE: Response middleware disabled to prevent console output doubling
+    // await middlewarePipeline.executeResponse(context, result);
     
     return name === 'version' ? result : formatToolResponse(result);
   } catch (error) {
     logger.error(`Tool execution error for '${name}':`, error);
     
-    // Execute response middleware with error
-    await middlewarePipeline.executeResponse(context, null, error as Error);
+    // NOTE: Error middleware disabled to prevent console output doubling
+    // await middlewarePipeline.executeResponse(context, null, error as Error);
     
     if (error instanceof McpError) {
       throw error;

@@ -262,7 +262,7 @@ export class ConsensusTool extends BaseTool {
         const threadContext = await getThread(validated.continuation_id);
         if (threadContext) {
           // Build conversation history using the same pattern as other tools
-          const [conversationContext] = await buildConversationHistory(threadContext, this._modelContext);
+          const { history: conversationContext } = await buildConversationHistory(threadContext, this._modelContext);
           if (conversationContext) {
             // Add conversation context to the beginning of the prompt
             validated.prompt = `${conversationContext}\n\n${validated.prompt}`;
@@ -502,7 +502,7 @@ export class ConsensusTool extends BaseTool {
 
     // Check total file size before processing
     try {
-      await checkTotalFileSize(files);
+      await checkTotalFileSize(files, 'Context files');
     } catch (error) {
       logger.warn(`File size check failed: ${error}`);
       return { content: '', processedFiles: [] };
@@ -589,7 +589,10 @@ export class ConsensusTool extends BaseTool {
     logger.info(`Processing ${providerConfigs.length} models sequentially`);
 
     for (let i = 0; i < providerConfigs.length; i++) {
-      const { provider, config } = providerConfigs[i];
+      const providerConfig = providerConfigs[i];
+      if (!providerConfig) continue;
+      
+      const { provider, config } = providerConfig;
       
       try {
         logger.info(`Processing ${config.model}:${config.stance} sequentially (${i + 1}/${providerConfigs.length})`);

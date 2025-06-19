@@ -44,13 +44,36 @@ export class TokenAllocationHelper {
  *
  * This class provides a single source of truth for all model-related
  * token calculations, ensuring consistency across the system.
+ *
+ * CONVERSATION MEMORY INTEGRATION:
+ * This module works closely with the conversation memory system to provide
+ * optimal token allocation for multi-turn conversations:
+ *
+ * 1. DUAL PRIORITIZATION STRATEGY SUPPORT:
+ *    - Provides separate token budgets for conversation history vs. files
+ *    - Enables the conversation memory system to apply newest-first prioritization
+ *    - Ensures optimal balance between context preservation and new content
+ *
+ * 2. MODEL-SPECIFIC ALLOCATION:
+ *    - Dynamic allocation based on model capabilities (context window size)
+ *    - Conservative allocation for smaller models (O3: 200K context)
+ *    - Generous allocation for larger models (Gemini: 1M+ context)
+ *    - Adapts token distribution ratios based on model capacity
+ *
+ * 3. CROSS-TOOL CONSISTENCY:
+ *    - Provides consistent token budgets across different tools
+ *    - Enables seamless conversation continuation between tools
+ *    - Supports conversation reconstruction with proper budget management
  */
 export class ModelContext {
   private _provider: any = null;
   private _capabilities: ModelCapabilities | null = null;
   private _tokenAllocation: TokenAllocation | null = null;
 
-  constructor(public readonly modelName: string) {}
+  constructor(
+    public readonly modelName: string, 
+    public readonly modelOption?: string // zen compatibility: for consensus tool stance options
+  ) {}
 
   /**
    * Get the model provider lazily.
@@ -80,10 +103,28 @@ export class ModelContext {
   }
 
   /**
-   * Calculate token allocation based on model capacity.
+   * Calculate token allocation based on model capacity and conversation requirements.
+   *
+   * This method implements the core token budget calculation that supports the
+   * dual prioritization strategy used in conversation memory and file processing:
+   *
+   * TOKEN ALLOCATION STRATEGY:
+   * 1. CONTENT vs RESPONSE SPLIT:
+   *    - Smaller models (< 300K): 60% content, 40% response (conservative)
+   *    - Larger models (≥ 300K): 80% content, 20% response (generous)
+   *
+   * 2. CONTENT SUB-ALLOCATION:
+   *    - File tokens: 30-40% of content budget for newest file versions
+   *    - History tokens: 40-50% of content budget for conversation context
+   *    - Remaining: Available for tool-specific prompt content
+   *
+   * 3. CONVERSATION MEMORY INTEGRATION:
+   *    - History allocation enables conversation reconstruction in reconstructThreadContext()
+   *    - File allocation supports newest-first file prioritization in tools
+   *    - Remaining budget passed to tools via _remaining_tokens parameter
    *
    * @param reservedForResponse - Override response token reservation
-   * @returns TokenAllocation with calculated budgets
+   * @returns TokenAllocation with calculated budgets for dual prioritization strategy
    */
   async calculateTokenAllocation(reservedForResponse?: number): Promise<TokenAllocation> {
     const capabilities = await this.getCapabilities();
@@ -151,8 +192,8 @@ export class ModelContext {
    */
   estimateTokens(text: string): number {
     // TODO: Integrate model-specific tokenizers
-    // For now, use conservative estimation
-    return Math.ceil(text.length / 3); // Conservative estimate
+    // For now, use conservative estimation (zen pattern: integer division)
+    return Math.floor(text.length / 3); // Conservative estimate, matches zen pattern
   }
 
   /**

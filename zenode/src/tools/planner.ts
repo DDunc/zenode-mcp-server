@@ -463,7 +463,7 @@ Include recommendations for zenode tool integration where appropriate.`;
 
       // Create new thread if needed (Rule 1)
       if (context.rule === ContinuationRule.NEW_PLANNING_THREAD) {
-        continuationId = await createThread('planner', 'planner-session');
+        continuationId = await createThread('planner', { tool: 'planner', session: 'planner-session' });
         result.continuation_id = continuationId;
       }
 

@@ -50,21 +50,23 @@ export interface ConversationStats {
 export interface ConversationTurn {
   role: 'user' | 'assistant';
   content: string;
-  model?: string;
   timestamp: string;
-  tool?: string;
-  files?: string[];
-  metadata?: Record<string, any>;
+  files?: string[]; // Files referenced in this specific turn
+  images?: string[]; // Images referenced in this specific turn (zen compatibility)
+  tool?: string; // Tool used for this turn (zen: tool_name)
+  model?: string; // Specific model used (zen: model_name)
+  metadata?: Record<string, any>; // Additional model info (zen: model_metadata)
 }
 
 export interface ConversationThread {
   id: string;
   thread_id: string;
+  parent_thread_id?: string; // Parent thread for conversation chains (zen compatibility)
   tool_name: string;
   created_at: string;
   last_updated: string;
   turns: ConversationTurn[];
-  initial_context?: Record<string, any>;
+  initial_context?: Record<string, any>; // Original request parameters (zen compatibility)
   metadata: {
     tools_used: string[];
     total_input_tokens: number;
