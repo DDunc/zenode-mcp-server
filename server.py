@@ -105,7 +105,7 @@ stderr_handler.setFormatter(LocalTimeFormatter(log_format))
 root_logger.addHandler(stderr_handler)
 
 # Note: MCP stdio_server interferes with stderr during tool execution
-# All logs are properly written to /tmp/mcp_server.log for monitoring
+# All logs are properly written to logs/mcp_server.log for monitoring
 
 # Set root logger level
 root_logger.setLevel(getattr(logging, log_level, logging.INFO))
@@ -122,7 +122,7 @@ try:
     file_handler = RotatingFileHandler(
         log_dir / "mcp_server.log",
         maxBytes=20 * 1024 * 1024,  # 20MB max file size
-        backupCount=10,  # Keep 10 rotated files (200MB total)
+        backupCount=5,  # Keep 10 rotated files (100MB total)
         encoding="utf-8",
     )
     file_handler.setLevel(getattr(logging, log_level, logging.INFO))
@@ -133,8 +133,8 @@ try:
     mcp_logger = logging.getLogger("mcp_activity")
     mcp_file_handler = RotatingFileHandler(
         log_dir / "mcp_activity.log",
-        maxBytes=20 * 1024 * 1024,  # 20MB max file size
-        backupCount=5,  # Keep 5 rotated files (100MB total)
+        maxBytes=10 * 1024 * 1024,  # 20MB max file size
+        backupCount=2,  # Keep 5 rotated files (20MB total)
         encoding="utf-8",
     )
     mcp_file_handler.setLevel(logging.INFO)
@@ -554,6 +554,12 @@ async def handle_call_tool(name: str, arguments: dict[str, Any]) -> list[TextCon
 
         # Consensus tool handles its own model configuration validation
         # No special handling needed at server level
+
+        # Skip model resolution for tools that don't require models (e.g., planner)
+        if not tool.requires_model():
+            logger.debug(f"Tool {name} doesn't require model resolution - skipping model validation")
+            # Execute tool directly without model context
+            return await tool.execute(arguments)
 
         # Handle auto mode at MCP boundary - resolve to specific model
         if model_name.lower() == "auto":

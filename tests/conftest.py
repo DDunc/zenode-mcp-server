@@ -15,17 +15,17 @@ parent_dir = Path(__file__).resolve().parent.parent
 if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
-# Set dummy API keys for tests if not already set
-if "GEMINI_API_KEY" not in os.environ:
+# Set dummy API keys for tests if not already set or if empty
+if not os.environ.get("GEMINI_API_KEY"):
     os.environ["GEMINI_API_KEY"] = "dummy-key-for-tests"
-if "OPENAI_API_KEY" not in os.environ:
+if not os.environ.get("OPENAI_API_KEY"):
     os.environ["OPENAI_API_KEY"] = "dummy-key-for-tests"
-if "XAI_API_KEY" not in os.environ:
+if not os.environ.get("XAI_API_KEY"):
     os.environ["XAI_API_KEY"] = "dummy-key-for-tests"
 
 # Set default model to a specific value for tests to avoid auto mode
 # This prevents all tests from failing due to missing model parameter
-os.environ["DEFAULT_MODEL"] = "gemini-2.5-flash-preview-05-20"
+os.environ["DEFAULT_MODEL"] = "gemini-2.5-flash"
 
 # Force reload of config module to pick up the env var
 import config  # noqa: E402
@@ -108,7 +108,7 @@ def mock_provider_availability(request, monkeypatch):
         if model_name in ["unavailable-model", "gpt-5-turbo", "o3"]:
             return None
         # For common test models, return a mock provider
-        if model_name in ["gemini-2.5-flash-preview-05-20", "gemini-2.5-pro-preview-06-05", "pro", "flash"]:
+        if model_name in ["gemini-2.5-flash", "gemini-2.5-pro", "pro", "flash"]:
             # Try to use the real provider first if it exists
             real_provider = original_get_provider(model_name)
             if real_provider:

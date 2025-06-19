@@ -86,36 +86,73 @@ tail -n 100 logs/mcp_activity.log
 # Follow tool activity in real-time
 tail -f logs/mcp_activity.log
 
+# PYTHON REFERENCE IMPLEMENTATION ONLY - DO NOT USE (Node.js port uses zenode/)
 # Use the dedicated log monitor (shows tool calls, completions, errors)
-python log_monitor.py
+# python log_monitor.py
 
 # Search logs for specific patterns
-grep "ERROR" logs/mcp_server.log
-grep "tool_name" logs/mcp_activity.log
+# grep "ERROR" logs/mcp_server.log
+# grep "tool_name" logs/mcp_activity.log
 ```
 
-### Testing Framework
+#### Available Log Files
 
-Simulation tests are available to test the MCP server in a 'live' scenario, using your configured API keys to ensure the models are working and the server is able to communicate back and forth.
-
+**Current log files (with proper rotation):**
 ```bash
-# Run tests with verbose output
-python communication_simulator_test.py --verbose
+# Main server log (all activity including debug info) - 20MB max, 10 backups
+tail -f logs/mcp_server.log
 
-# List all available tests
-python communication_simulator_test.py --list-tests
+# Tool activity only (TOOL_CALL, TOOL_COMPLETED, etc.) - 20MB max, 5 backups  
+tail -f logs/mcp_activity.log
+```
 
-# RECOMMENDED: Run tests individually for better isolation and debugging
-python communication_simulator_test.py --individual basic_conversation
-python communication_simulator_test.py --individual content_validation
-python communication_simulator_test.py --individual cross_tool_continuation
-python communication_simulator_test.py --individual memory_validation
+# PYTHON REFERENCE IMPLEMENTATION ONLY - DO NOT USE (Node.js port uses zenode/)
+# **For programmatic log analysis (used by tests):**
+# ```python
+# # Import the LogUtils class from simulator tests
+# from simulator_tests.log_utils import LogUtils
+# 
+# # Get recent logs
+# recent_logs = LogUtils.get_recent_server_logs(lines=500)
+# 
+# # Check for errors
+# errors = LogUtils.check_server_logs_for_errors()
+# 
+# # Search for specific patterns
+# matches = LogUtils.search_logs_for_pattern("TOOL_CALL.*debug")
+# ```
 
-# Run multiple specific tests
-python communication_simulator_test.py --tests basic_conversation content_validation
+### Testing
 
-# Run individual test with verbose output for debugging
-python communication_simulator_test.py --individual memory_validation --verbose
+# PYTHON REFERENCE IMPLEMENTATION ONLY - DO NOT USE (Node.js port uses zenode/)
+# Simulation tests are available to test the MCP server in a 'live' scenario, using your configured
+# API keys to ensure the models are working and the server is able to communicate back and forth. 
+
+**IMPORTANT**: After any code changes, restart your Claude session for the changes to take effect.
+
+#### Run All Simulator Tests
+# PYTHON REFERENCE IMPLEMENTATION ONLY - DO NOT USE (Node.js port uses zenode/)
+# ```bash
+# # Run the complete test suite
+# python communication_simulator_test.py
+# 
+# # Run tests with verbose output
+# python communication_simulator_test.py --verbose
+
+# # List all available tests
+# python communication_simulator_test.py --list-tests
+# 
+# # RECOMMENDED: Run tests individually for better isolation and debugging
+# python communication_simulator_test.py --individual basic_conversation
+# python communication_simulator_test.py --individual content_validation
+# python communication_simulator_test.py --individual cross_tool_continuation
+# python communication_simulator_test.py --individual memory_validation
+# 
+# # Run multiple specific tests
+# python communication_simulator_test.py --tests basic_conversation content_validation
+# 
+# # Run individual test with verbose output for debugging
+# python communication_simulator_test.py --individual memory_validation --verbose
 ```
 
 Available simulator tests include:
@@ -330,18 +367,21 @@ zenode:seer "What error is shown in this screenshot?" \
 # View recent errors
 grep "ERROR" logs/mcp_server.log | tail -20
 
+# PYTHON REFERENCE IMPLEMENTATION ONLY - DO NOT USE (Node.js port uses zenode/)
 # Check virtual environment
-which python
+# which python
 # Should show: .../zen-mcp-server/.zen_venv/bin/python
 
+# PYTHON REFERENCE IMPLEMENTATION ONLY - DO NOT USE (Node.js port uses zenode/)
 # Run individual failing test with verbose output
-python communication_simulator_test.py --individual <test_name> --verbose
+# python communication_simulator_test.py --individual <test_name> --verbose
 
 # Check server logs during test execution
 tail -f logs/mcp_server.log
 
+# PYTHON REFERENCE IMPLEMENTATION ONLY - DO NOT USE (Node.js port uses zenode/)
 # Run tests with debug output
-LOG_LEVEL=DEBUG python communication_simulator_test.py --individual <test_name>
+# LOG_LEVEL=DEBUG python communication_simulator_test.py --individual <test_name>
 ```
 
 ### Key Files and Directories

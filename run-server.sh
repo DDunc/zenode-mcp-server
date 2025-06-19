@@ -31,19 +31,19 @@ readonly LOG_FILE="mcp_server.log"
 
 # Print colored output
 print_success() {
-    echo -e "${GREEN}✓${NC} $1"
+    echo -e "${GREEN}✓${NC} $1" >&2
 }
 
 print_error() {
-    echo -e "${RED}✗${NC} $1"
+    echo -e "${RED}✗${NC} $1" >&2
 }
 
 print_warning() {
-    echo -e "${YELLOW}!${NC} $1"
+    echo -e "${YELLOW}!${NC} $1" >&2
 }
 
 print_info() {
-    echo -e "${YELLOW}$1${NC}"
+    echo -e "${YELLOW}$1${NC}" >&2
 }
 
 # Get the script's directory (works on all platforms)
@@ -213,11 +213,76 @@ setup_venv() {
     # Create venv if it doesn't exist
     if [[ ! -d "$VENV_PATH" ]]; then
         print_info "Creating isolated environment..."
-        if $python_cmd -m venv "$VENV_PATH" 2>/dev/null; then
+        
+        # Capture error output for better diagnostics
+        local venv_error
+        if venv_error=$($python_cmd -m venv "$VENV_PATH" 2>&1); then
             print_success "Created isolated environment"
         else
             print_error "Failed to create virtual environment"
-            exit 1
+            echo ""
+            echo "Error details:"
+            echo "$venv_error"
+            echo ""
+            
+            # Check for common Linux issues and try fallbacks
+            local os_type=$(detect_os)
+            if [[ "$os_type" == "linux" || "$os_type" == "wsl" ]]; then
+                if echo "$venv_error" | grep -E -q "No module named venv|venv.*not found"; then
+                    print_warning "Python venv module not available, trying fallback methods..."
+                    
+                    # Try virtualenv as fallback
+                    if command -v virtualenv &> /dev/null; then
+                        print_info "Attempting to create environment with virtualenv..."
+                        local fallback_error
+                        if fallback_error=$(virtualenv -p "$python_cmd" "$VENV_PATH" 2>&1); then
+                            print_success "Created environment using virtualenv fallback"
+                            # Continue to path setup below instead of early return
+                        else
+                            echo "virtualenv fallback failed: $fallback_error"
+                        fi
+                    fi
+                    
+                    # Try python -m virtualenv if directory wasn't created
+                    if [[ ! -d "$VENV_PATH" ]]; then
+                        local fallback_error
+                        if fallback_error=$($python_cmd -m virtualenv "$VENV_PATH" 2>&1); then
+                            print_success "Created environment using python -m virtualenv fallback"
+                            # Continue to path setup below instead of early return
+                        else
+                            echo "python -m virtualenv fallback failed: $fallback_error"
+                        fi
+                    fi
+                    
+                    # Check if any fallback succeeded
+                    if [[ ! -d "$VENV_PATH" ]]; then
+                        print_error "All virtual environment creation methods failed!"
+                        echo ""
+                        echo "Please install the venv or virtualenv package:"
+                        echo "  Ubuntu/Debian: sudo apt install python3-venv python3-virtualenv"
+                        echo "  RHEL/CentOS:   sudo dnf install python3-venv python3-virtualenv"
+                        echo "  Fedora:        sudo dnf install python3-venv python3-virtualenv"
+                        echo "  Arch:          sudo pacman -S python-virtualenv"
+                        echo ""
+                        echo "Or install via pip:"
+                        echo "  $python_cmd -m pip install --user virtualenv"
+                        echo ""
+                        exit 1
+                    fi
+                elif echo "$venv_error" | grep -q "Permission denied"; then
+                    print_error "Permission denied creating virtual environment"
+                    echo ""
+                    echo "Try running with different permissions or in a different directory:"
+                    echo "  mkdir -p ~/zen-mcp-temp && cd ~/zen-mcp-temp"
+                    echo "  git clone <repository-url> && cd zen-mcp-server && ./run-server.sh"
+                    echo ""
+                    exit 1
+                else
+                    exit 1
+                fi
+            else
+                exit 1
+            fi
         fi
     fi
     
@@ -235,7 +300,7 @@ setup_venv() {
     # Always use venv Python
     if [[ -f "$venv_python" ]]; then
         if [[ -n "${VIRTUAL_ENV:-}" ]]; then
-            print_success "Using activated virtual environment" >&2
+            print_success "Using activated virtual environment"
         fi
         # Convert to absolute path for MCP registration
         local abs_venv_python=$(cd "$(dirname "$venv_python")" && pwd)/$(basename "$venv_python")
@@ -410,13 +475,13 @@ validate_api_keys() {
     
     if [[ "$has_key" == false ]]; then
         print_error "No API keys found in .env!"
-        echo ""
-        echo "Please edit .env and add at least one API key:"
-        echo "  GEMINI_API_KEY=your-actual-key"
-        echo "  OPENAI_API_KEY=your-actual-key"
-        echo "  XAI_API_KEY=your-actual-key"
-        echo "  OPENROUTER_API_KEY=your-actual-key"
-        echo ""
+        echo "" >&2
+        echo "Please edit .env and add at least one API key:" >&2
+        echo "  GEMINI_API_KEY=your-actual-key" >&2
+        echo "  OPENAI_API_KEY=your-actual-key" >&2
+        echo "  XAI_API_KEY=your-actual-key" >&2
+        echo "  OPENROUTER_API_KEY=your-actual-key" >&2
+        echo "" >&2
         return 1
     fi
     
@@ -784,7 +849,7 @@ main() {
             ;;
         *)
             print_error "Unknown option: $arg"
-            echo ""
+            echo "" >&2
             show_help
             exit 1
             ;;

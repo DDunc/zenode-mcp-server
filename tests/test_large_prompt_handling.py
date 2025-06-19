@@ -19,7 +19,8 @@ from config import MCP_PROMPT_SIZE_LIMIT
 from tools.analyze import AnalyzeTool
 from tools.chat import ChatTool
 from tools.codereview import CodeReviewTool
-from tools.debug import DebugIssueTool
+
+# from tools.debug import DebugIssueTool  # Commented out - debug tool refactored
 from tools.precommit import Precommit
 from tools.thinkdeep import ThinkDeepTool
 
@@ -76,7 +77,7 @@ class TestLargePromptHandling:
             mock_provider.generate_content.return_value = MagicMock(
                 content="This is a test response",
                 usage={"input_tokens": 10, "output_tokens": 20, "total_tokens": 30},
-                model_name="gemini-2.5-flash-preview-05-20",
+                model_name="gemini-2.5-flash",
                 metadata={"finish_reason": "STOP"},
             )
             mock_get_provider.return_value = mock_provider
@@ -103,7 +104,7 @@ class TestLargePromptHandling:
             patch("utils.model_context.ModelContext") as mock_model_context_class,
         ):
 
-            mock_provider = create_mock_provider(model_name="gemini-2.5-flash-preview-05-20", context_window=1_048_576)
+            mock_provider = create_mock_provider(model_name="gemini-2.5-flash", context_window=1_048_576)
             mock_provider.generate_content.return_value.content = "Processed prompt from file"
             mock_get_provider.return_value = mock_provider
 
@@ -111,7 +112,7 @@ class TestLargePromptHandling:
             from utils.model_context import TokenAllocation
 
             mock_model_context = MagicMock()
-            mock_model_context.model_name = "gemini-2.5-flash-preview-05-20"
+            mock_model_context.model_name = "gemini-2.5-flash"
             mock_model_context.calculate_token_allocation.return_value = TokenAllocation(
                 total_tokens=1_048_576,
                 content_tokens=838_861,
@@ -250,25 +251,30 @@ class TestLargePromptHandling:
         # The core fix ensures large prompts are detected at the right time
         assert output["status"] in ["success", "files_required_to_continue", "resend_prompt"]
 
-    @pytest.mark.asyncio
-    async def test_debug_large_error_description(self, large_prompt):
-        """Test that debug tool detects large error_description."""
-        tool = DebugIssueTool()
-        result = await tool.execute({"prompt": large_prompt})
+    # NOTE: Debug tool tests have been commented out because the debug tool has been
+    # refactored to use a self-investigation pattern instead of accepting a prompt field.
+    # The new debug tool requires fields like: step, step_number, total_steps, next_step_required, findings
+    # and doesn't have the "resend_prompt" functionality for large prompts.
 
-        assert len(result) == 1
-        output = json.loads(result[0].text)
-        assert output["status"] == "resend_prompt"
+    # @pytest.mark.asyncio
+    # async def test_debug_large_error_description(self, large_prompt):
+    #     """Test that debug tool detects large error_description."""
+    #     tool = DebugIssueTool()
+    #     result = await tool.execute({"prompt": large_prompt})
+    #
+    #     assert len(result) == 1
+    #     output = json.loads(result[0].text)
+    #     assert output["status"] == "resend_prompt"
 
-    @pytest.mark.asyncio
-    async def test_debug_large_error_context(self, large_prompt, normal_prompt):
-        """Test that debug tool detects large error_context."""
-        tool = DebugIssueTool()
-        result = await tool.execute({"prompt": normal_prompt, "error_context": large_prompt})
-
-        assert len(result) == 1
-        output = json.loads(result[0].text)
-        assert output["status"] == "resend_prompt"
+    # @pytest.mark.asyncio
+    # async def test_debug_large_error_context(self, large_prompt, normal_prompt):
+    #     """Test that debug tool detects large error_context."""
+    #     tool = DebugIssueTool()
+    #     result = await tool.execute({"prompt": normal_prompt, "error_context": large_prompt})
+    #
+    #     assert len(result) == 1
+    #     output = json.loads(result[0].text)
+    #     assert output["status"] == "resend_prompt"
 
     @pytest.mark.asyncio
     async def test_analyze_large_question(self, large_prompt):
@@ -293,7 +299,7 @@ class TestLargePromptHandling:
             mock_provider.generate_content.return_value = MagicMock(
                 content="Success",
                 usage={"input_tokens": 10, "output_tokens": 20, "total_tokens": 30},
-                model_name="gemini-2.5-flash-preview-05-20",
+                model_name="gemini-2.5-flash",
                 metadata={"finish_reason": "STOP"},
             )
             mock_get_provider.return_value = mock_provider
@@ -336,7 +342,7 @@ class TestLargePromptHandling:
             mock_provider.generate_content.return_value = MagicMock(
                 content="Response to the large prompt",
                 usage={"input_tokens": 12000, "output_tokens": 10, "total_tokens": 12010},
-                model_name="gemini-2.5-flash-preview-05-20",
+                model_name="gemini-2.5-flash",
                 metadata={"finish_reason": "STOP"},
             )
             mock_get_provider.return_value = mock_provider
@@ -368,7 +374,7 @@ class TestLargePromptHandling:
             mock_provider.generate_content.return_value = MagicMock(
                 content="Success",
                 usage={"input_tokens": 10, "output_tokens": 20, "total_tokens": 30},
-                model_name="gemini-2.5-flash-preview-05-20",
+                model_name="gemini-2.5-flash",
                 metadata={"finish_reason": "STOP"},
             )
             mock_get_provider.return_value = mock_provider
@@ -390,7 +396,7 @@ class TestLargePromptHandling:
             patch("utils.model_context.ModelContext") as mock_model_context_class,
         ):
 
-            mock_provider = create_mock_provider(model_name="gemini-2.5-flash-preview-05-20", context_window=1_048_576)
+            mock_provider = create_mock_provider(model_name="gemini-2.5-flash", context_window=1_048_576)
             mock_provider.generate_content.return_value.content = "Success"
             mock_get_provider.return_value = mock_provider
 
@@ -398,7 +404,7 @@ class TestLargePromptHandling:
             from utils.model_context import TokenAllocation
 
             mock_model_context = MagicMock()
-            mock_model_context.model_name = "gemini-2.5-flash-preview-05-20"
+            mock_model_context.model_name = "gemini-2.5-flash"
             mock_model_context.calculate_token_allocation.return_value = TokenAllocation(
                 total_tokens=1_048_576,
                 content_tokens=838_861,
@@ -437,7 +443,7 @@ class TestLargePromptHandling:
             mock_provider.generate_content.return_value = MagicMock(
                 content="Weather is sunny",
                 usage={"input_tokens": 10, "output_tokens": 20, "total_tokens": 30},
-                model_name="gemini-2.5-flash-preview-05-20",
+                model_name="gemini-2.5-flash",
                 metadata={"finish_reason": "STOP"},
             )
             mock_get_provider.return_value = mock_provider
@@ -502,7 +508,7 @@ class TestLargePromptHandling:
             mock_provider.generate_content.return_value = MagicMock(
                 content="Hi there!",
                 usage={"input_tokens": 10, "output_tokens": 20, "total_tokens": 30},
-                model_name="gemini-2.5-flash-preview-05-20",
+                model_name="gemini-2.5-flash",
                 metadata={"finish_reason": "STOP"},
             )
             mock_get_provider.return_value = mock_provider
@@ -555,7 +561,7 @@ class TestLargePromptHandling:
             mock_provider.generate_content.return_value = MagicMock(
                 content="Continuing our conversation...",
                 usage={"input_tokens": 10, "output_tokens": 20, "total_tokens": 30},
-                model_name="gemini-2.5-flash-preview-05-20",
+                model_name="gemini-2.5-flash",
                 metadata={"finish_reason": "STOP"},
             )
             mock_get_provider.return_value = mock_provider

@@ -19,14 +19,14 @@ class GeminiModelProvider(ModelProvider):
 
     # Model configurations
     SUPPORTED_MODELS = {
-        "gemini-2.5-flash-preview-05-20": {
+        "gemini-2.5-flash": {
             "context_window": 1_048_576,  # 1M tokens
             "supports_extended_thinking": True,
             "max_thinking_tokens": 24576,  # Flash 2.5 thinking budget limit
             "supports_images": True,  # Vision capability
             "max_image_size_mb": 20.0,  # Conservative 20MB limit for reliability
         },
-        "gemini-2.5-pro-preview-06-05": {
+        "gemini-2.5-pro": {
             "context_window": 1_048_576,  # 1M tokens
             "supports_extended_thinking": True,
             "max_thinking_tokens": 32768,  # Pro 2.5 thinking budget limit
@@ -34,8 +34,8 @@ class GeminiModelProvider(ModelProvider):
             "max_image_size_mb": 32.0,  # Higher limit for Pro model
         },
         # Shorthands
-        "flash": "gemini-2.5-flash-preview-05-20",
-        "pro": "gemini-2.5-pro-preview-06-05",
+        "flash": "gemini-2.5-flash",
+        "pro": "gemini-2.5-pro",
     }
 
     # Thinking mode configurations - percentages of model's max_thinking_tokens
@@ -94,6 +94,7 @@ class GeminiModelProvider(ModelProvider):
             supports_function_calling=True,
             supports_images=config.get("supports_images", False),
             max_image_size_mb=config.get("max_image_size_mb", 0.0),
+            supports_temperature=True,  # Gemini models accept temperature parameter
             temperature_constraint=temp_constraint,
         )
 
@@ -364,8 +365,8 @@ class GeminiModelProvider(ModelProvider):
         """Check if the model supports vision (image processing)."""
         # Gemini 2.5 models support vision
         vision_models = {
-            "gemini-2.5-flash-preview-05-20",
-            "gemini-2.5-pro-preview-06-05",
+            "gemini-2.5-flash",
+            "gemini-2.5-pro",
             "gemini-2.0-flash",
             "gemini-1.5-pro",
             "gemini-1.5-flash",
