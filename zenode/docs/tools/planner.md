@@ -1,169 +1,184 @@
-# Planner Tool - Interactive Step-by-Step Planning
+# Planner Tool - Interactive Sequential Planning
 
-**Break down complex projects into manageable, structured plans through step-by-step thinking**
+**Break down complex tasks through sophisticated step-by-step planning with branching and revision capabilities**
 
-The `planner` tool helps you break down complex ideas, problems, or projects into multiple manageable steps. Perfect for system design, migration strategies, architectural planning, and feature development with branching and revision capabilities.
-
-## How It Works
-
-The planner tool enables step-by-step thinking with incremental plan building:
-
-1. **Start with step 1**: Describe the task or problem to plan
-2. **Continue building**: Add subsequent steps, building the plan piece by piece  
-3. **Revise when needed**: Update earlier decisions as new insights emerge
-4. **Branch alternatives**: Explore different approaches when multiple options exist
-5. **Continue across sessions**: Resume planning later with full context via Redis persistence
-
-## Zenode Usage Examples
-
-### Basic Planning
-```bash
-zenode:planner "Plan a real-time notification system" --step_number 1 --total_steps 5 --next_step_required true
-```
-
-### Continue Planning Session
-```bash
-zenode:planner "Database schema design" --step_number 2 --continuation_id uuid-abc123 --next_step_required true
-```
-
-### Branch Alternative Approach
-```bash
-zenode:planner "Alternative: Use WebSockets" --step_number 3 --is_branch_point true --branch_id websocket-approach --branch_from_step 2
-```
-
-### Revise Previous Step
-```bash
-zenode:planner "Updated auth requirements" --step_number 4 --is_step_revision true --revises_step_number 2
-```
-
-### Cross-Tool Workflow
-```bash
-:z "Use planner to design the API, then analyze the existing codebase with zenode:analyze to see how it fits"
-```
+The `zenode:planner` tool enables systematic breakdown of complex ideas, problems, or projects into manageable, structured plans. Unlike simple planning tools, it supports incremental thinking, branching strategies, step revision, and multi-session continuation with Redis persistence. Perfect for system design, migration strategies, architectural decisions, and feature development.
 
 ## Key Features
 
-- **Step-by-step breakdown**: Build plans incrementally with full context awareness
-- **Branching support**: Explore alternative approaches when needed  
-- **Revision capabilities**: Update earlier decisions as new insights emerge
-- **Multi-session continuation**: Resume planning across multiple sessions with Redis persistence
-- **Dynamic adjustment**: Modify step count and approach as planning progresses
-- **Visual presentation**: ASCII charts, diagrams, and structured formatting
-- **Professional output**: Clean, structured plans without emojis or time estimates
-- **Cross-tool integration**: Seamlessly flows into zenode:analyze, zenode:debug, etc.
+- **Sequential step-by-step thinking** with full context awareness
+- **Incremental plan building** - develop understanding as you progress
+- **Branching support** for exploring alternative approaches
+- **Revision capabilities** to update earlier decisions based on new insights
+- **Multi-session continuation** with Redis persistence across sessions
+- **Dynamic step adjustment** - modify total steps as complexity becomes clear
+- **Cross-tool integration** with zenode ecosystem for execution
+- **Professional output** with structured formatting and clear dependencies
 
-## Zenode Integration Examples
+## How It Works: 4-Rule Continuation Logic
 
-### Planning with Analysis
+### Rule 1: New Planning Session
 ```bash
-zenode:planner "Plan microservices architecture" --step_number 1 --total_steps 5
-# After planning is complete, analyze existing code:
-zenode:analyze --files src/ --prompt "How does this plan fit with our current codebase?"
+# Starting fresh planning - creates new thread
+zenode:planner --step "Define requirements for user authentication system" --step-number 1 --total-steps 5 --next-step-required true
 ```
 
-### Planning with Visual Design
+### Rule 2: Previous Plan Context Loading
 ```bash
-zenode:planner "Design user authentication flow" --step_number 1 --total_steps 4
-# Analyze visual mockups with seer tool:
-zenode:seer "Review this login UI against our planned flow" --images "/workspace/designs/login.png"
+# Reference completed plan for new related planning
+zenode:planner --step "Extend authentication to support OAuth" --step-number 1 --total-steps 3 --next-step-required true --continuation-id {previous_auth_plan_id}
 ```
 
-### Planning with Research
+### Rule 3: Continue Current Plan
 ```bash
-zenode:planner "Plan AI integration strategy" --step_number 1 --total_steps 6
-# Research current best practices:
-zenode:visit "Research latest AI integration patterns and best practices"
+# Continue existing planning session
+zenode:planner --step "Design database schema for user profiles" --step-number 2 --total-steps 5 --next-step-required true --continuation-id {current_session_id}
 ```
 
-### Collaborative Planning
+### Rule 4: Complete Planning
 ```bash
-:z "Create a comprehensive plan for migrating to microservices, then get multiple perspectives"
-# This will use planner for structured breakdown, then coordinate with other tools for validation
+# Final step in planning session
+zenode:planner --step "Deploy and monitor authentication system" --step-number 5 --total-steps 5 --next-step-required false --continuation-id {current_session_id}
 ```
 
-## Advanced Features
+## Tool Parameters
 
-### Continuation Logic (Redis-Powered)
+### Required Parameters
+- `step`: Detailed description of the current planning step and WHY it's needed
+- `step_number`: Sequential step number (starting from 1)
+- `total_steps`: Current estimate of total steps (can be adjusted)
+- `next_step_required`: Whether another planning step will follow
 
-The planner implements sophisticated 4-rule continuation logic:
+### Revision Parameters
+- `is_step_revision`: Boolean indicating this revises a previous step
+- `revises_step_number`: Which step number this revision updates
 
-1. **New Planning Thread**: `step_number=1` without `continuation_id` creates new session
-2. **Load Previous Context**: `step_number=1` with `continuation_id` loads previous completed plans  
-3. **Continue Current Plan**: `step_number>1` with `continuation_id` continues current session
-4. **Complete Planning**: `next_step_required=false` stores complete plan summary
+### Branching Parameters
+- `is_branch_point`: Boolean indicating this creates an alternative approach
+- `branch_from_step`: Step number where this branch diverges
+- `branch_id`: Identifier for the branch (e.g., 'microservices-approach')
 
-### Branching and Alternatives
+### Continuation Parameters
+- `continuation_id`: UUID for multi-session continuation
+- `more_steps_needed`: Boolean indicating additional steps beyond estimate
 
+## Usage Examples
+
+### System Architecture Planning
 ```bash
-# Create branch point
-zenode:planner "Explore database options" --step_number 3 --is_branch_point true --branch_id database-choice
+# Step 1: Start new planning session
+zenode:planner "Design scalable microservices architecture for e-commerce platform that needs to handle 100K concurrent users and integrate with existing legacy systems" --step-number 1 --total-steps 6 --next-step-required true
 
-# Continue on branch
-zenode:planner "PostgreSQL implementation" --step_number 4 --branch_id postgresql-approach
+# Step 2: Continue with technical analysis
+zenode:planner "Analyze current legacy system integration points and identify API boundaries for smooth data flow between old and new systems" --step-number 2 --total-steps 6 --next-step-required true --continuation-id {session_id}
 
-# Alternative branch  
-zenode:planner "MongoDB implementation" --step_number 4 --branch_id mongodb-approach
+# Step 3: Branch for alternative approach
+zenode:planner "Consider strangler fig pattern as alternative to big-bang migration approach" --step-number 3 --total-steps 6 --next-step-required true --continuation-id {session_id} --is-branch-point true --branch-from-step 2 --branch-id "strangler-pattern"
 ```
 
-### Revision Capabilities
-
+### Feature Development Planning
 ```bash
-# Revise earlier decision
-zenode:planner "Updated security requirements" --step_number 5 --is_step_revision true --revises_step_number 2
+# Initial feature planning
+zenode:planner "Plan implementation of real-time chat feature with message persistence, user presence indicators, and file sharing capabilities" --step-number 1 --total-steps 4 --next-step-required true
 
-# The tool tracks revision history and impacts on downstream steps
+# Detailed technical breakdown
+zenode:planner "Design WebSocket connection management with fallback to long polling, including connection pooling and load balancing across multiple server instances" --step-number 2 --total-steps 4 --next-step-required true --continuation-id {session_id}
+
+# Revision based on new requirements
+zenode:planner "Revise connection management to include support for mobile app background states and push notifications when WebSocket disconnects" --step-number 2 --total-steps 4 --next-step-required true --continuation-id {session_id} --is-step-revision true --revises-step-number 2
 ```
 
-## Best Practices
+## Zenode-Specific Features
 
-- **Start broad, then narrow**: Begin with high-level strategy, then add implementation details
-- **Include constraints**: Consider technical, organizational, and resource limitations
-- **Plan for validation**: Include testing and verification steps
-- **Think about dependencies**: Identify what needs to happen before each step
-- **Consider alternatives**: Note when multiple approaches are viable
-- **Enable continuation**: Use continuation_id for multi-session planning
-- **Cross-tool integration**: Plan how outputs will feed into zenode:analyze, zenode:debug, etc.
+### Redis Persistence Integration
+The planner tool leverages zenode's Redis-based conversation memory:
+- **Session persistence**: Plans survive container restarts
+- **Cross-session references**: Load context from previous complete plans
+- **Branch tracking**: Maintain multiple plan alternatives
+- **Revision history**: Track changes and decision evolution
 
-## Zenode Advantages
-
-### Redis Persistence
-- **Session survival**: Planning sessions persist across container restarts
-- **Multi-day planning**: Resume complex planning across multiple sessions
-- **Historical context**: Previous completed plans inform new planning decisions
-- **Conversation threading**: Full context maintained across tool transitions
-
-### Cross-Tool Workflows
-- **Analysis integration**: Plans flow directly into zenode:analyze for code review
-- **Debug integration**: Implementation issues can reference original planning context
-- **Visual integration**: zenode:seer can analyze UI/UX against planned workflows
-- **Research integration**: zenode:visit can validate planning assumptions with real data
-
-### Professional Output
-- **Structured formatting**: Clear, actionable steps without time estimates
-- **Technical depth**: Includes specific technology recommendations and security implications
-- **Risk assessment**: Built-in consideration of challenges and mitigation strategies
-- **Success criteria**: Clear validation steps for each planning phase
-
-## Continue With Other Zenode Tools
-
-Like all zenode tools, you can seamlessly continue with other tools using the output from planning:
-
+### Multi-Provider Model Support
 ```bash
-# After completing a planning session
-zenode:analyze --files src/ --continuation_id [plan-uuid] --prompt "Analyze how our current code aligns with this plan"
-
-zenode:debug --problem "The authentication step from our plan isn't working" --continuation_id [plan-uuid]
-
-:z "Review this completed plan and get consensus from multiple models on implementation priority"
+# Use different models for different planning phases
+zenode:planner "Strategic overview" --model pro --step-number 1    # Gemini Pro for high-level thinking
+zenode:planner "Technical details" --model o3 --step-number 2     # OpenAI O3 for systematic analysis
+zenode:planner "Implementation" --model flash --step-number 3     # Gemini Flash for rapid iteration
 ```
 
-## Redis Configuration Benefits
+### Container-Native Operations
+- **Workspace awareness**: Plans consider `/workspace/` file structure
+- **Docker integration**: Account for containerized development environment
+- **Volume persistence**: Plans reference accessible file paths
+- **Service orchestration**: Consider multi-container deployments
 
-Unlike upstream's migration to in-memory storage, zenode maintains Redis-based conversation persistence, providing:
+### Cross-Tool Integration Patterns
+```bash
+# Planner → Analysis workflow
+# Step 1: Create strategic plan
+zenode:planner "Plan microservices decomposition" --step-number 1 --total-steps 3 --next-step-required true
 
-- **Production scalability**: Handle multiple concurrent planning sessions
-- **Distributed planning**: Multiple team members can contribute to the same plan
-- **Historical analysis**: Track planning patterns and improvement opportunities
-- **Enterprise readiness**: Persistent conversation state for compliance and auditing
+# Step 2: Execute with analysis tools
+zenode:analyze "analyze codebase for microservices boundaries based on plan" --files ["/workspace/src"] --continuation-id {planner_session}
 
-The planner tool showcases zenode's architectural advantages while providing sophisticated project planning capabilities that enhance the entire development workflow.
+# Step 3: Continue planning with analysis results
+zenode:planner "Refine boundaries based on analysis findings" --step-number 2 --total-steps 3 --next-step-required true --continuation-id {planner_session}
+```
+
+## Advanced Planning Patterns
+
+### Branching Strategy Example
+```bash
+# Main approach: Complete rewrite
+zenode:planner "Plan complete TypeScript rewrite of legacy JavaScript codebase" --step-number 1 --total-steps 5 --next-step-required true
+
+# Alternative branch: Incremental migration
+zenode:planner "Consider incremental TypeScript adoption with gradual type introduction" --step-number 1 --total-steps 4 --next-step-required true --is-branch-point true --branch-from-step 1 --branch-id "incremental-migration"
+
+# Compare branches with consensus
+zenode:consensus "Compare rewrite vs incremental migration approaches" --models '[
+  {"model": "pro", "stance": "for", "stance_prompt": "Advocate for complete rewrite approach"},
+  {"model": "o3", "stance": "for", "stance_prompt": "Advocate for incremental migration"}
+]'
+```
+
+### Multi-Session Continuation
+```bash
+# Complete Phase 1 planning
+zenode:planner "Finalize Phase 1 architecture decisions" --step-number 8 --total-steps 8 --next-step-required false --continuation-id {phase1_id}
+
+# Start Phase 2 with Phase 1 context
+zenode:planner "Begin Phase 2 implementation planning using Phase 1 architecture" --step-number 1 --total-steps 5 --next-step-required true --continuation-id {phase1_id}
+```
+
+## Best Practices for Zenode
+
+### Effective Step Descriptions
+```bash
+# ✅ GOOD: Specific with context
+zenode:planner "Design database schema for user authentication with support for OAuth2, MFA, and role-based permissions, considering our existing PostgreSQL setup and need for GDPR compliance" --step-number 1
+
+# ❌ BAD: Too vague
+zenode:planner "Design database" --step-number 1
+```
+
+### Strategic Model Selection
+```bash
+# High-level strategic thinking
+zenode:planner "Strategic overview" --model pro --thinking-mode high
+
+# Detailed technical planning
+zenode:planner "Technical implementation" --model o3 --thinking-mode medium
+
+# Quick iteration planning
+zenode:planner "Implementation details" --model flash --thinking-mode low
+```
+
+## When to Use Planner vs Other Zenode Tools
+
+- **Use `zenode:planner`** for: Complex multi-step projects, architectural decisions, systematic problem breakdown
+- **Use `zenode:thinkdeep`** for: Single-session deep analysis without step-by-step structure
+- **Use `zenode:chat`** for: Open-ended discussions and brainstorming
+- **Use `zenode:analyze`** for: Direct code/file analysis without planning overhead
+- **Use `zenode:consensus`** for: Comparing completed plans or approaches
+
+The zenode:planner tool provides sophisticated project planning capabilities that leverage zenode's unique architecture for persistent, collaborative, and executable planning workflows.
