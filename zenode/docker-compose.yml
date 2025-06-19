@@ -31,14 +31,14 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - NODE_ENV=production
       - MCP_WORKSPACE=/workspace
-      - MCP_PROJECT_MOUNTED=${MCP_PROJECT_MOUNTED:-false}
-      - MCP_PROJECT_ROOT=${MCP_PROJECT_ROOT:-}
+      - MCP_PROJECT_MOUNTED=true
+      - MCP_PROJECT_ROOT=/workspace
     volumes:
-      - ${MCP_WORKSPACE:-./workspace}:/workspace:ro
+      - ..:/workspace:rw
       - ${HOME}:/home:rw
-      - ${MCP_PROJECT_ROOT:-/dev/null}:/project:ro
       - zenode-logs:/tmp
       - ./.zenode:/app/.zenode:rw
+    working_dir: /workspace/zenode
     depends_on:
       redis:
         condition: service_healthy

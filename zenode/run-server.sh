@@ -112,8 +112,13 @@ fi
 
 # Set workspace directory
 if [ -z "$MCP_WORKSPACE" ]; then
-    export MCP_WORKSPACE="$HOME"
-    echo -e "${BLUE}ℹ️  MCP_WORKSPACE not set. Using home directory: $MCP_WORKSPACE${NC}"
+    # Default to zen-mcp-server project root for zenode self-analysis
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+    export MCP_WORKSPACE="$PROJECT_ROOT"
+    echo -e "${BLUE}ℹ️  MCP_WORKSPACE not set. Using project root for zenode self-analysis: $MCP_WORKSPACE${NC}"
+    echo -e "${BLUE}    This allows zenode tools to analyze the zen-mcp-server codebase by default.${NC}"
+    echo -e "${BLUE}    To use home directory instead, set: export MCP_WORKSPACE=\"$HOME\"${NC}"
 fi
 
 # Auto-detect project directory for mounting

@@ -371,6 +371,83 @@ Remember, you can call zenode tools to help you reason about things more fully, 
 
 **IMPORTANT**: Always use `/workspace/` paths when providing files to zenode tools, not local filesystem paths.
 
+## 🚨 CRITICAL: :z Coordination Rules
+
+### Immediate Triggers (ALWAYS use :z when you see these)
+- **User writes `:z` anywhere in their message** ← MOST IMPORTANT
+- User asks for "comprehensive analysis" 
+- User asks for "multiple perspectives"
+- User asks to "think deeply" or "analyze thoroughly"
+- Complex debugging, architecture decisions, or critical issues
+- Questions about code quality, security, or performance
+- Test-related requests (writing tests, fixing failing tests, test frameworks)
+- Planning complex tasks or orchestrating multiple steps
+
+### Required :z Response Format
+When :z is triggered, use this exact format:
+```bash
+:z "coordinate with [specific zenode tools] on [user's question]. Be critical and skeptical, verify all major assertions, and provide comprehensive analysis."
+```
+
+### Complete Zenode Tool Arsenal for :z Coordination
+
+**Core Analysis & Reasoning Tools:**
+- **zenode:thinkdeep** - Deep reasoning and validation, extended thinking
+- **zenode:analyze** - Code/file analysis, pattern detection
+- **zenode:debug** - Root cause analysis, error diagnosis, troubleshooting
+- **zenode:chat** - Alternative perspectives, collaborative thinking
+
+**Specialized Development Tools:**
+- **zenode:codereview** - Professional code review, security analysis, quality checks
+- **zenode:testgen** - Test generation (ALWAYS call for test-related requests)
+- **zenode:precommit** - Git change validation, pre-commit analysis
+- **zenode:planner** - Step-by-step planning, orchestrating multiple tools
+
+**Advanced Capabilities:**
+- **zenode:seer** - Vision analysis, image processing, UI/UX review
+- **zenode:visit** - Web browsing, search, reverse image search
+- **zenode:gopher** - File system access, directory operations
+- **zenode:grunts** - Distributed LLM orchestration for complex web development
+
+**Utility Tools:**
+- **zenode:config** - API key setup and configuration
+- **zenode:bootstrap** - First-time setup and project initialization
+
+### Default :z Tool Combinations by Use Case
+
+**For Code Analysis:**
+```bash
+:z "coordinate with zenode:thinkdeep, zenode:analyze, and zenode:codereview"
+```
+
+**For Debugging:**
+```bash
+:z "coordinate with zenode:debug, zenode:thinkdeep, and zenode:analyze"
+```
+
+**For Testing:**
+```bash
+:z "coordinate with zenode:testgen, zenode:codereview, and zenode:analyze"
+```
+
+**For Architecture/Planning:**
+```bash
+:z "coordinate with zenode:planner, zenode:thinkdeep, and zenode:analyze"
+```
+
+**For Complex Issues (Default):**
+```bash
+:z "coordinate with zenode:thinkdeep, zenode:analyze, zenode:debug, and zenode:chat"
+```
+
+### **RULE: If unsure whether to use :z, err on the side of using it.**
+
+The zenode tools provide enhanced capabilities including:
+- Higher token limits (1M tokens vs Claude's 200K)
+- Specialized AI models for different thinking styles
+- Deep reasoning and thinking modes
+- Collaborative multi-AI analysis
+
 ## 🤖 Automatic Path Transformation for Claude
 
 ### Critical Instruction for Claude Code Assistant
@@ -685,3 +762,36 @@ ZENODE_CLI_DEBUG=1 node dist/index.js seer '{"prompt": "analyze", "images": ["pa
 - Maintains backward compatibility with MCP server functionality
 
 This breakthrough enables zenode to work as both a production MCP server AND a development/testing CLI tool!
+
+## 🔧 Claude Code Behavior Configuration
+
+### File Reading Expansion Rules
+
+**CRITICAL: Always show substantial file content by default**
+
+When using the Read tool in Claude Code:
+
+1. **Default behavior**: Read files WITHOUT limit/offset parameters to show full content
+2. **For large files**: Use `limit: 100` to show first 100 lines instead of prompting "ctrl + r to expand"
+3. **NEVER prompt user to expand** - always show meaningful content immediately
+
+**Examples:**
+```bash
+# ✅ GOOD: Show full file content
+Read("/workspace/project/src/component.tsx")
+
+# ✅ GOOD: Show first 100 lines for large files  
+Read("/workspace/project/large-file.js", limit: 100)
+
+# ❌ BAD: Don't truncate to tiny snippets that require expansion
+Read("/workspace/project/src/component.tsx", limit: 20)
+```
+
+### File Access Best Practices
+
+- **Always read substantial content** to understand context fully
+- **Use concurrent Read calls** when analyzing multiple related files
+- **Show 100+ lines minimum** unless file is truly massive
+- **Avoid requiring user interaction** to see basic file content
+
+**Rationale**: Users prefer seeing actual code content immediately rather than having to manually expand truncated output. This improves development workflow efficiency.

@@ -9,23 +9,50 @@ import { MCP_WORKSPACE } from '../config.js';
 import { logger } from './logger.js';
 
 /**
- * Translate a file path for the current environment
- * Handles Docker vs local development path differences
+ * Intelligent path resolution for zenode tools
+ * Supports relative paths, absolute paths, and smart workspace detection
+ */
+export function resolveZenodePath(inputPath: string): string {
+  // Handle absolute paths
+  if (path.isAbsolute(inputPath)) {
+    // If absolute path starts with /workspace, use as-is
+    if (inputPath.startsWith('/workspace')) {
+      return inputPath;
+    }
+    // If absolute path starts with /Users or /home, map to workspace
+    if (inputPath.startsWith('/Users/') || inputPath.startsWith('/home/')) {
+      // Extract the part after the home directory
+      const parts = inputPath.split('/');
+      const userIndex = parts.findIndex(p => p === 'Users' || p === 'home');
+      if (userIndex >= 0 && userIndex + 2 < parts.length) {
+        const relativePath = parts.slice(userIndex + 2).join('/');
+        return path.join('/workspace', relativePath);
+      }
+    }
+    // For other absolute paths, assume they're workspace-relative
+    return inputPath;
+  }
+
+  // Handle relative paths
+  if (inputPath.startsWith('./') || inputPath.startsWith('../')) {
+    // Relative to current working directory (/workspace/zenode)
+    return path.resolve(inputPath);
+  }
+
+  // Handle home directory shortcuts
+  if (inputPath.startsWith('~/')) {
+    return path.join('/workspace', inputPath.slice(2));
+  }
+
+  // Default: treat as relative to zenode directory
+  return path.resolve(inputPath);
+}
+
+/**
+ * Legacy function for backwards compatibility
  */
 export function translatePathForEnvironment(filePath: string): string {
-  // If path is already absolute and exists, return it
-  if (path.isAbsolute(filePath)) {
-    return filePath;
-  }
-
-  // Handle workspace-relative paths
-  if (filePath.startsWith('~/') || filePath.startsWith('./')) {
-    const relativePath = filePath.startsWith('~/') ? filePath.slice(2) : filePath.slice(2);
-    return path.join(MCP_WORKSPACE, relativePath);
-  }
-
-  // Assume relative to workspace
-  return path.join(MCP_WORKSPACE, filePath);
+  return resolveZenodePath(filePath);
 }
 
 /**

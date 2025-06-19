@@ -50,6 +50,7 @@ import { GopherTool } from './tools/gopher.js';
 import { GruntsTool } from './tools/grunts.js';
 import { ConfigTool } from './tools/config.js';
 import { BootstrapTool } from './tools/bootstrap.js';
+import { PlannerTool } from './tools/planner.js';
 import { SeerTool } from './tools/seer.js';
 import { VisitTool } from './tools/visit.js';
 
@@ -82,6 +83,7 @@ const TOOLS: Record<string, BaseTool> = {
   grunts: new GruntsTool(), // Distributed LLM orchestration system
   config: new ConfigTool(), // Interactive CLI configuration tool
   bootstrap: new BootstrapTool(), // First-time setup and project configuration
+  planner: new PlannerTool(), // Interactive step-by-step planning tool
   seer: new SeerTool(), // Dedicated vision and image analysis tool
   visit: new VisitTool(), // Web browsing, search, and reverse image search
 };
@@ -639,10 +641,10 @@ async function runCliMode() {
       console.log(JSON.stringify(result, null, 2));
     } else {
       if (toolName === 'version') {
-        console.log(result.content[0].text);
+        console.log(result.content?.[0]?.text || 'Version info unavailable');
       } else {
         console.log('\n📋 Result:');
-        console.log(result.content);
+        console.log(result.content || 'No content');
         if (result.continuation_offer) {
           const offer = result.continuation_offer;
           console.log(`\n🔗 Thread: ${offer.thread_id} | Turns: ${offer.stats.total_turns} | Tokens: ${offer.stats.total_input_tokens + offer.stats.total_output_tokens}`);
@@ -662,25 +664,17 @@ async function runCliMode() {
 /**
  * Main entry point - detects MCP vs CLI mode
  */
+
 async function startZenode() {
-  // Force MCP mode for testing - disable CLI detection temporarily
-  const forceMcpMode = true;
+  // Check if CLI arguments are provided
+  const hasCliArgs = process.argv.length > 2;
   
-  if (forceMcpMode) {
-    // Always run in MCP Server Mode for testing
-    console.error('DEBUG: Forced MCP server mode');
-    await main();
+  if (hasCliArgs) {
+    // CLI Mode: node dist/index.js toolname args
+    await runCliMode();
   } else {
-    // Check if CLI arguments are provided
-    const hasCliArgs = process.argv.length > 2;
-    
-    if (hasCliArgs) {
-      // CLI Mode: node dist/index.js toolname args
-      await runCliMode();
-    } else {
-      // MCP Server Mode: Default behavior for MCP clients
-      await main();
-    }
+    // MCP Server Mode: Default behavior for MCP clients
+    await main();
   }
 }
 

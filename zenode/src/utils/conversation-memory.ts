@@ -6,6 +6,7 @@
  */
 
 import { createClient, RedisClientType } from 'redis';
+import { v4 as uuidv4 } from 'uuid';
 import { REDIS_URL } from '../config.js';
 import { logger } from './logger.js';
 import { ConversationThread, ConversationTurn, ConversationStats } from '../types/tools.js';
@@ -600,21 +601,12 @@ export async function planFileInclusionBySize(
  * Generate a unique thread ID
  */
 function generateThreadId(): string {
-  const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 8);
-  return `${timestamp}-${random}`;
+  // Use uuid v4 library to generate proper UUID format to match Python implementation
+  // and satisfy Zod UUID validation requirements. This ensures consistency across
+  // the Python and Node.js implementations.
+  return uuidv4();
 }
 
-/**
- * Calculate remaining tokens for a thread
- */
-function calculateRemainingTokens(thread: ConversationThread): number {
-  // This is a simplified calculation
-  // In production, this should use actual token counting
-  const MAX_CONTEXT_TOKENS = 100000; // Example limit
-  const usedTokens = thread.metadata.total_input_tokens + thread.metadata.total_output_tokens;
-  return Math.max(0, MAX_CONTEXT_TOKENS - usedTokens);
-}
 
 // Initialize Redis on module load
 initializeRedis().catch((error) => {

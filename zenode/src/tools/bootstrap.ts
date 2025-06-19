@@ -91,12 +91,17 @@ export class BootstrapTool extends BaseTool {
     // Check if we're in a project that needs mounting
     const projectStatus = this.getProjectStatus();
     
+    // Check :z coordination capabilities
+    const coordinationStatus = this.checkCoordinationCapabilities();
+    
     if (isFirstRun) {
       return this.formatOutput(`🚀 **First Time Setup Required**
 
 ${bootstrapConfig.bootstrap?.prompts?.welcome || '🚀 Welcome to Zenode MCP Server! This is your first time running :z in this project.'}
 
 ${projectStatus}
+
+${coordinationStatus}
 
 **Current Status:**
 - File Access: Not configured
@@ -121,6 +126,8 @@ Run the configure command to get started!`, 'success');
     return this.formatOutput(`✅ **Zenode Already Configured**
 
 ${projectStatus}
+
+${coordinationStatus}
 
 **Current Settings:**
 - File Access: ${userConfig.file_access_mode || 'full'}
@@ -318,6 +325,49 @@ ${setupResult.summary}
         summary: ''
       };
     }
+  }
+
+  private checkCoordinationCapabilities(): string {
+    // Check if all critical zenode tools are available
+    const criticalTools = [
+      'thinkdeep', 'analyze', 'debug', 'chat', 
+      'codereview', 'testgen', 'precommit', 'planner'
+    ];
+    
+    const availableTools = [
+      'analyze', 'chat', 'codereview', 'debug', 'gopher', 'grunts',
+      'planner', 'precommit', 'seer', 'testgen', 'thinkdeep', 'visit'
+    ];
+    
+    const missingTools = criticalTools.filter(tool => !availableTools.includes(tool));
+    
+    let status = '🔗 **:z Coordination Status:**\n';
+    
+    if (missingTools.length === 0) {
+      status += '✅ All critical tools available for :z coordination\n';
+      status += `📋 Available tools: ${availableTools.join(', ')}\n`;
+      status += '🎯 Claude Code :z shorthand: Ready for use\n';
+    } else {
+      status += `⚠️ Missing critical tools: ${missingTools.join(', ')}\n`;
+      status += '🔧 Some :z coordination features may be limited\n';
+    }
+    
+    // Check workspace configuration for self-analysis
+    const workspace = process.env.MCP_WORKSPACE || '/workspace';
+    status += '\n📁 **Workspace Configuration:**\n';
+    
+    // Check if workspace points to zen-mcp-server for self-analysis
+    if (workspace.includes('zen-mcp-server')) {
+      status += '✅ Workspace configured for zen-mcp-server self-analysis\n';
+      status += `📂 Workspace: ${workspace}\n`;
+      status += '🔍 Zenode tools can analyze their own codebase\n';
+    } else {
+      status += '⚠️ Workspace not pointing to zen-mcp-server project\n';
+      status += `📂 Current workspace: ${workspace}\n`;
+      status += '💡 Consider setting MCP_WORKSPACE to zen-mcp-server root for self-analysis\n';
+    }
+    
+    return status;
   }
 
   private detectProjectRoot(): string | null {

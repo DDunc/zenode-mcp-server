@@ -50,8 +50,9 @@ RUN addgroup -g 1001 -S zenode && \
     adduser -S zenode -u 1001 -G zenode && \
     chown -R zenode:zenode /app
 
-# Create log directory
-RUN mkdir -p /tmp && chown zenode:zenode /tmp
+# Create log directory and project mount point
+RUN mkdir -p /tmp && chown zenode:zenode /tmp && \
+    mkdir -p /project && chown zenode:zenode /project
 
 USER zenode
 

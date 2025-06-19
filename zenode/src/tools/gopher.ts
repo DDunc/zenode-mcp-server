@@ -21,6 +21,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { BaseTool, BaseRequestSchema } from './base.js';
 import { ToolOutput } from '../types/tools.js';
+import { resolveZenodePath } from '../utils/file-utils.js';
 
 const execAsync = promisify(exec);
 
@@ -240,13 +241,11 @@ export class GopherTool extends BaseTool {
   }
 
   /**
-   * Resolve path relative to current working directory
+   * Resolve path using intelligent zenode path resolution
+   * Supports relative paths, absolute paths, and smart workspace detection
    */
-  private resolvePath(path: string): string {
-    if (isAbsolute(path)) {
-      return path;
-    }
-    return resolve(process.cwd(), path);
+  private resolvePath(inputPath: string): string {
+    return resolveZenodePath(inputPath);
   }
 
   /**
