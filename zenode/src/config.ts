@@ -107,6 +107,10 @@ export const TEMPERATURE_BALANCED = 0.5; // For general chat
 // Used when brainstorming, exploring alternatives, or architectural discussions
 export const TEMPERATURE_CREATIVE = 0.7; // For architecture, deep thinking
 
+// TEMPERATURE_CONSENSUS: Lower temperature for consistent consensus analysis
+// Used for multi-model consensus to ensure more deterministic and comparable responses
+export const TEMPERATURE_CONSENSUS = 0.2; // For consensus analysis
+
 // Thinking Mode Defaults
 // DEFAULT_THINKING_MODE_THINKDEEP: Default thinking depth for extended reasoning tool
 // Higher modes use more computational budget but provide deeper analysis
@@ -181,6 +185,15 @@ export const ENABLE_CLAUDE_OPUS = process.env.ENABLE_CLAUDE_OPUS === 'true';
 export const MAX_CONVERSATION_TURNS = parseInt(process.env.MAX_CONVERSATION_TURNS || '20', 10);
 export const CONVERSATION_TIMEOUT_HOURS = parseInt(process.env.CONVERSATION_TIMEOUT_HOURS || '3', 10);
 
+// Consensus tool configuration
+// DEFAULT_CONSENSUS_MAX_INSTANCES_PER_COMBINATION: Maximum instances per model+stance combination
+// Prevents overwhelming the system with too many identical model configurations
+// This matches the Python implementation limit for consistency
+export const DEFAULT_CONSENSUS_MAX_INSTANCES_PER_COMBINATION = parseInt(
+  process.env.DEFAULT_CONSENSUS_MAX_INSTANCES_PER_COMBINATION || '2', 
+  10
+);
+
 // Validate configuration values
 if (MAX_CONVERSATION_TURNS <= 0) {
   console.warn(`Invalid MAX_CONVERSATION_TURNS value (${MAX_CONVERSATION_TURNS}), using default of 20 turns`);
@@ -188,6 +201,10 @@ if (MAX_CONVERSATION_TURNS <= 0) {
 
 if (CONVERSATION_TIMEOUT_HOURS <= 0) {
   console.warn(`Invalid CONVERSATION_TIMEOUT_HOURS value (${CONVERSATION_TIMEOUT_HOURS}), using default of 3 hours`);
+}
+
+if (DEFAULT_CONSENSUS_MAX_INSTANCES_PER_COMBINATION <= 0) {
+  console.warn(`Invalid DEFAULT_CONSENSUS_MAX_INSTANCES_PER_COMBINATION value (${DEFAULT_CONSENSUS_MAX_INSTANCES_PER_COMBINATION}), using default of 2 instances`);
 }
 
 // Helper function to check if any API is configured

@@ -42,6 +42,7 @@ import { configLoader } from './config/loader.js';
 import { ChatTool } from './tools/chat.js';
 import { ThinkDeepTool } from './tools/thinkdeep.js';
 import { CodeReviewTool } from './tools/codereview.js';
+import { ConsensusTool } from './tools/consensus.js';
 import { DebugTool } from './tools/debug.js';
 import { AnalyzeTool } from './tools/analyze.js';
 import { PrecommitTool } from './tools/precommit.js';
@@ -75,6 +76,7 @@ const TOOLS: Record<string, BaseTool> = {
   chat: new ChatTool(),
   thinkdeep: new ThinkDeepTool(),
   codereview: new CodeReviewTool(),
+  consensus: new ConsensusTool(), // Multi-model perspective gathering with stance assignment
   debug: new DebugTool(),
   analyze: new AnalyzeTool(),
   precommit: new PrecommitTool(),

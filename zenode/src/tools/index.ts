@@ -5,6 +5,7 @@
 export { AnalyzeTool } from './analyze.js';
 export { ChatTool } from './chat.js';
 export { CodeReviewTool } from './codereview.js';
+export { ConsensusTool } from './consensus.js';
 export { DebugTool } from './debug.js';
 export { GopherTool } from './gopher.js';
 export { GruntsTool } from './grunts.js';
