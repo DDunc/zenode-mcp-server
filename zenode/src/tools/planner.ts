@@ -121,6 +121,17 @@ migration strategies, architectural decisions, problem decomposition.`;
     return PLANNER_PROMPT + "\n\n" + PLANNER_SYSTEM_CONTEXT;
   }
 
+  /**
+   * Planner tool doesn't require AI model access - it's pure data processing.
+   * 
+   * This prevents the server from trying to resolve model names like "auto"
+   * when the planner tool is used, since it overrides execute() and doesn't
+   * make any AI API calls.
+   */
+  requiresModel(): boolean {
+    return false;
+  }
+
   getInputSchema(): object {
     return {
       type: "object",

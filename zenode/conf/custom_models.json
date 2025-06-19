@@ -86,7 +86,7 @@
       "description": "Claude 3.5 Sonnet - Enhanced version with better reasoning"
     },
     {
-      "model_name": "google/gemini-2.5-pro-preview",
+      "model_name": "google/gemini-2.5-pro",
       "aliases": ["pro","gemini-pro", "gemini", "pro-openrouter"],
       "context_window": 1048576,
       "supports_extended_thinking": false,
@@ -95,7 +95,7 @@
       "description": "Google's Gemini 2.5 Pro via OpenRouter"
     },
     {
-      "model_name": "google/gemini-2.5-flash-preview-05-20",
+      "model_name": "google/gemini-2.5-flash",
       "aliases": ["flash","gemini-flash", "flash-openrouter", "flash-2.5"],
       "context_window": 1048576,
       "supports_extended_thinking": false,
@@ -146,7 +146,11 @@
       "supports_extended_thinking": false,
       "supports_json_mode": true,
       "supports_function_calling": true,
-      "description": "OpenAI's o3 model - well-rounded and powerful across domains"
+      "supports_images": true,
+      "max_image_size_mb": 20.0,
+      "supports_temperature": false,
+      "temperature_constraint": "fixed",
+      "description": "OpenAI's o3 model - well-rounded and powerful across domains with vision"
     },
     {
       "model_name": "openai/o3-mini",
@@ -155,7 +159,11 @@
       "supports_extended_thinking": false,
       "supports_json_mode": true,
       "supports_function_calling": true,
-      "description": "OpenAI's o3-mini model - balanced performance and speed"
+      "supports_images": true,
+      "max_image_size_mb": 20.0,
+      "supports_temperature": false,
+      "temperature_constraint": "fixed",
+      "description": "OpenAI's o3-mini model - balanced performance and speed with vision"
     },
     {
       "model_name": "openai/o3-mini-high",
@@ -164,7 +172,11 @@
       "supports_extended_thinking": false,
       "supports_json_mode": true,
       "supports_function_calling": true,
-      "description": "OpenAI's o3-mini with high reasoning effort - optimized for complex problems"
+      "supports_images": true,
+      "max_image_size_mb": 20.0,
+      "supports_temperature": false,
+      "temperature_constraint": "fixed",
+      "description": "OpenAI's o3-mini with high reasoning effort - optimized for complex problems with vision"
     },
     {
       "model_name": "openai/o3-pro",
@@ -173,7 +185,11 @@
       "supports_extended_thinking": false,
       "supports_json_mode": true,
       "supports_function_calling": true,
-      "description": "OpenAI's o3-pro model - professional-grade reasoning and analysis"
+      "supports_images": true,
+      "max_image_size_mb": 20.0,
+      "supports_temperature": false,
+      "temperature_constraint": "fixed",
+      "description": "OpenAI's o3-pro model - professional-grade reasoning and analysis with vision"
     },
     {
       "model_name": "openai/o4-mini",
@@ -182,7 +198,11 @@
       "supports_extended_thinking": false,
       "supports_json_mode": true,
       "supports_function_calling": true,
-      "description": "OpenAI's o4-mini model - optimized for shorter contexts with rapid reasoning"
+      "supports_images": true,
+      "max_image_size_mb": 20.0,
+      "supports_temperature": false,
+      "temperature_constraint": "fixed",
+      "description": "OpenAI's o4-mini model - optimized for shorter contexts with rapid reasoning and vision"
     },
     {
       "model_name": "openai/o4-mini-high",
@@ -191,7 +211,11 @@
       "supports_extended_thinking": false,
       "supports_json_mode": true,
       "supports_function_calling": true,
-      "description": "OpenAI's o4-mini with high reasoning effort - enhanced for complex tasks"
+      "supports_images": true,
+      "max_image_size_mb": 20.0,
+      "supports_temperature": false,
+      "temperature_constraint": "fixed",
+      "description": "OpenAI's o4-mini with high reasoning effort - enhanced for complex tasks with vision"
     },
     {
       "model_name": "openai/gpt-4o",
@@ -224,7 +248,7 @@
       "description": "Claude 3 Sonnet - Reliable vision analysis, excellent for technical diagrams (5MB images)"
     },
     {
-      "model_name": "google/gemini-2.5-pro-preview",
+      "model_name": "google/gemini-2.5-pro",
       "aliases": ["gemini-vision", "gemini-pro-vision"],
       "context_window": 1000000,
       "supports_extended_thinking": false,

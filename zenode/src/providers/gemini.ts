@@ -38,9 +38,9 @@ export class GeminiProvider extends BaseModelProvider {
    */
   private initializeModels(): void {
     // Gemini 2.5 Flash
-    this.modelCapabilities.set('gemini-2.5-flash-preview-05-20', {
+    this.modelCapabilities.set('gemini-2.5-flash', {
       provider: this.type,
-      modelName: 'gemini-2.5-flash-preview-05-20',
+      modelName: 'gemini-2.5-flash',
       friendlyName: 'Gemini 2.5 Flash',
       contextWindow: 1048576, // 1M tokens
       supportsExtendedThinking: true,
@@ -52,9 +52,9 @@ export class GeminiProvider extends BaseModelProvider {
     });
 
     // Gemini 2.5 Pro
-    this.modelCapabilities.set('gemini-2.5-pro-preview-06-05', {
+    this.modelCapabilities.set('gemini-2.5-pro', {
       provider: this.type,
-      modelName: 'gemini-2.5-pro-preview-06-05',
+      modelName: 'gemini-2.5-pro',
       friendlyName: 'Gemini 2.5 Pro',
       contextWindow: 1048576, // 1M tokens
       supportsExtendedThinking: true,
@@ -66,10 +66,10 @@ export class GeminiProvider extends BaseModelProvider {
     });
 
     // Set up aliases
-    this.modelAliases.set('flash', 'gemini-2.5-flash-preview-05-20');
-    this.modelAliases.set('gemini-flash', 'gemini-2.5-flash-preview-05-20');
-    this.modelAliases.set('pro', 'gemini-2.5-pro-preview-06-05');
-    this.modelAliases.set('gemini-pro', 'gemini-2.5-pro-preview-06-05');
+    this.modelAliases.set('flash', 'gemini-2.5-flash');
+    this.modelAliases.set('gemini-flash', 'gemini-2.5-flash');
+    this.modelAliases.set('pro', 'gemini-2.5-pro');
+    this.modelAliases.set('gemini-pro', 'gemini-2.5-pro');
   }
 
   /**
@@ -164,8 +164,8 @@ export class GeminiProvider extends BaseModelProvider {
     // Gemini vision models and their limits
     const visionModels = new Set([
       'gemini-pro-vision',
-      'gemini-2.5-pro-preview-06-05',
-      'gemini-2.5-flash-preview-05-20',
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
       'pro',
       'flash',
     ]);

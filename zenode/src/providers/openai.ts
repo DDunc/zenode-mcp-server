@@ -132,6 +132,16 @@ export class OpenAIProvider extends BaseModelProvider {
   }
 
   /**
+   * Check if a model supports temperature parameter
+   */
+  private supportsTemperature(modelName: string): boolean {
+    // O3 and O4 reasoning models do not support temperature parameter
+    const noTemperatureModels = new Set(['o3', 'o3-pro', 'o4-mini', 'o4-mini-high']);
+    const resolvedName = this.resolveModelAlias(modelName) || modelName;
+    return !noTemperatureModels.has(resolvedName);
+  }
+
+  /**
    * Generate a response from OpenAI
    */
   async generateResponse(request: ModelRequest): Promise<ModelResponse> {
@@ -144,16 +154,25 @@ export class OpenAIProvider extends BaseModelProvider {
       // Format messages with system prompt
       const messages = this.formatMessages(request.messages, request.systemPrompt);
 
-      // Create chat completion
-      const completion = await this.client.chat.completions.create({
+      // Check if model supports temperature parameter
+      const supportsTemperature = this.supportsTemperature(modelName);
+      
+      // Create chat completion - only include temperature if supported
+      const completionParams: OpenAI.Chat.ChatCompletionCreateParams = {
         model: modelName,
         messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
-        temperature,
         max_tokens: request.maxTokens,
         stop: request.stopSequences,
         response_format: request.jsonMode ? { type: 'json_object' } : undefined,
         stream: false, // We don't support streaming yet
-      });
+      };
+
+      // Only add temperature if the model supports it
+      if (supportsTemperature) {
+        completionParams.temperature = temperature;
+      }
+
+      const completion = await this.client.chat.completions.create(completionParams);
 
       const choice = completion.choices[0];
       if (!choice?.message?.content) {

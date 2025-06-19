@@ -51,8 +51,11 @@ import { GopherTool } from './tools/gopher.js';
 import { GruntsTool } from './tools/grunts.js';
 import { ConfigTool } from './tools/config.js';
 import { BootstrapTool } from './tools/bootstrap.js';
+import { ListModelsTool } from './tools/listmodels.js';
 import { PlannerTool } from './tools/planner.js';
+import { RefactorTool } from './tools/refactor.js';
 import { SeerTool } from './tools/seer.js';
+import { TracerTool } from './tools/tracer.js';
 import { VisitTool } from './tools/visit.js';
 
 // Create the MCP server instance with a unique name identifier
@@ -85,8 +88,11 @@ const TOOLS: Record<string, BaseTool> = {
   grunts: new GruntsTool(), // Distributed LLM orchestration system
   config: new ConfigTool(), // Interactive CLI configuration tool
   bootstrap: new BootstrapTool(), // First-time setup and project configuration
+  listmodels: new ListModelsTool(), // Display available AI models organized by provider
   planner: new PlannerTool(), // Interactive step-by-step planning tool
+  refactor: new RefactorTool(), // Intelligent code refactoring with precise line-number guidance
   seer: new SeerTool(), // Dedicated vision and image analysis tool
+  tracer: new TracerTool(), // Static code analysis workflow generator
   visit: new VisitTool(), // Web browsing, search, and reverse image search
 };
 

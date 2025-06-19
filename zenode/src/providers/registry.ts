@@ -339,7 +339,7 @@ export class ModelProviderRegistry {
 
     // Check which providers are configured
     if (GEMINI_API_KEY && GEMINI_API_KEY !== 'your_gemini_api_key_here') {
-      const geminiModels = ['gemini-2.5-flash-preview-05-20', 'gemini-2.5-pro-preview-06-05', 'flash', 'pro'];
+      const geminiModels = ['gemini-2.5-flash', 'gemini-2.5-pro', 'flash', 'pro'];
       models.push(...geminiModels.filter((m) => this.isModelAllowed(m)));
     }
 
@@ -354,8 +354,8 @@ export class ModelProviderRegistry {
         'anthropic/claude-3.5-sonnet',
         'anthropic/claude-3-sonnet', 
         'anthropic/claude-3-haiku',
-        'google/gemini-2.5-flash-preview-05-20',
-        'google/gemini-2.5-pro-preview-06-05',
+        'google/gemini-2.5-flash',
+        'google/gemini-2.5-pro',
         'flash',
         'pro',
         'sonnet',

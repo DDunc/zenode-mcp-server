@@ -99,6 +99,9 @@ export interface CustomModelConfig {
   supports_json_mode: boolean;
   supports_function_calling: boolean;
   supports_images?: boolean;
+  max_image_size_mb?: number;
+  supports_temperature?: boolean;
+  temperature_constraint?: 'fixed' | 'range' | 'discrete';
   is_custom?: boolean;
   description: string;
 }
