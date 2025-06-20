@@ -29,6 +29,9 @@ import {
   McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 
+import { MCPConnectionManager } from './connection/manager.js';
+import { healthChecker } from './health/checker.js';
+
 import { VERSION, AUTHOR, UPDATED, hasAnyApiConfigured, getConfiguredProviders, IS_AUTO_MODE } from './config.js';
 import { logger, mcpActivityLogger } from './utils/logger.js';
 import winston from 'winston';
@@ -57,6 +60,8 @@ import { RefactorTool } from './tools/refactor.js';
 import { SeerTool } from './tools/seer.js';
 import { TracerTool } from './tools/tracer.js';
 import { VisitTool } from './tools/visit.js';
+import { ThreadsTool } from './tools/threads.js';
+import { HealthTool } from './tools/health.js';
 
 // Create the MCP server instance with a unique name identifier
 // This name is used by MCP clients to identify and connect to this specific server
@@ -92,8 +97,10 @@ const TOOLS: Record<string, BaseTool> = {
   planner: new PlannerTool(), // Interactive step-by-step planning tool
   refactor: new RefactorTool(), // Intelligent code refactoring with precise line-number guidance
   seer: new SeerTool(), // Dedicated vision and image analysis tool
+  threads: new ThreadsTool(), // Thread labeling, search, and conversation management
   tracer: new TracerTool(), // Static code analysis workflow generator
   visit: new VisitTool(), // Web browsing, search, and reverse image search
+  health: new HealthTool(), // Health diagnostics and connection troubleshooting
 };
 
 // NOTE: Middleware pipeline completely disabled due to console output conflicts
@@ -525,7 +532,7 @@ For updates, visit: https://github.com/yourusername/zenode-mcp-server`;
 }
 
 /**
- * Main server initialization
+ * Main server initialization with connection management
  */
 async function main() {
   logger.info('Starting Zenode MCP Server...');
@@ -544,6 +551,7 @@ async function main() {
     
     logger.info(`Configuration loaded - Trigger pattern: "${config.logging.conversationTrigger}"`);
     logger.info(`Logging enabled: ${config.logging.enabled}, Path: ${config.logging.logPath}`);
+    
     // Validate API configuration
     if (!hasAnyApiConfigured()) {
       throw new Error(
@@ -555,12 +563,20 @@ async function main() {
     // Configure providers
     await configureProviders();
 
-    // Start the stdio server
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
+    // Initialize connection manager and health checker
+    const connectionManager = new MCPConnectionManager(server);
+    healthChecker.setConnectionManager(connectionManager);
     
-    logger.info('Zenode MCP Server started successfully');
+    // Start the MCP server with connection management
+    await connectionManager.connect();
+    
+    logger.info('Zenode MCP Server started successfully with connection management');
     logger.info('Listening for MCP requests on stdio...');
+    
+    // Log initial health status
+    const health = await healthChecker.getHealthStatus();
+    logger.info('Initial health check:', { status: health.status, uptime: health.uptime });
+    
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);
@@ -636,9 +652,15 @@ async function runCliMode() {
     else if (toolName === 'version') {
       result = formatVersionResponse();
     }
+    // Handle health check for CLI
+    else if (toolName === 'healthcheck') {
+      const { healthy, message } = await healthChecker.checkHealthCLI();
+      console.log(message);
+      process.exit(healthy ? 0 : 1);
+    }
     // Unknown tool
     else {
-      throw new Error(`Unknown tool: ${toolName}. Available tools: ${Object.keys(TOOLS).concat(['version']).join(', ')}`);
+      throw new Error(`Unknown tool: ${toolName}. Available tools: ${Object.keys(TOOLS).concat(['version', 'healthcheck']).join(', ')}`);
     }
     
     // Output result as JSON for programmatic use, or formatted for human reading

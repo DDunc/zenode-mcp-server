@@ -102,7 +102,9 @@
       "Bash(./zenode-auto-repair.sh:*)",
       "Bash(./zenode-status.sh:*)",
       "mcp__zenode__planner",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "Bash(:z \"test basic functionality with zenode:chat\")"
     ],
     "deny": []
   }
