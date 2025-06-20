@@ -157,8 +157,13 @@ ${bootstrapResult.content}
       // Extract conversation context if continuing
       const conversationContext = (args as any)._conversation_context;
       
-      // Create full prompt
-      const fullPrompt = validated.prompt + fileContext;
+      // Apply smart context injection
+      const contextResult = await this.injectSmartContext(validated);
+      const contextEnhancedArgs = contextResult.enhancedArgs;
+      const contextInfo = contextResult.contextInfo;
+      
+      // Create full prompt (use enhanced prompt if context was injected)
+      const fullPrompt = (contextEnhancedArgs.prompt || validated.prompt) + fileContext;
       
       // Create model request
       const modelRequest = await this.createModelRequest(
@@ -187,14 +192,20 @@ ${bootstrapResult.content}
         validated.files, // Same files were processed by tool
       );
       
+      // Add context suggestion to response if context was found
+      const contextSuggestion = this.formatContextSuggestion(contextInfo);
+      const enhancedContent = response.content + contextSuggestion;
+      
       // Format output
       const result = this.formatOutput(
-        response.content,
+        enhancedContent,
         'success',
         'text',
         {
           model_used: response.modelName,
           token_usage: response.usage,
+          context_applied: contextInfo?.injected || false,
+          related_threads_found: contextInfo?.threadsFound?.length || 0,
         },
         continuationOffer,
       );

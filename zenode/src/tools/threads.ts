@@ -16,6 +16,7 @@ import { logger } from '../utils/logger.js';
 import { getThread, getConversationStats } from '../utils/conversation-memory.js';
 import { createClient, RedisClientType } from 'redis';
 import { REDIS_URL } from '../config.js';
+import { ChatTool } from './chat.js';
 
 /**
  * Thread action types
@@ -28,6 +29,7 @@ const ThreadAction = z.enum([
   'delete',     // Delete entire thread
   'stats',      // Get thread statistics
   'export',     // Export thread for sharing
+  'auto_label', // Auto-generate label using AI content analysis
 ]);
 
 /**
@@ -35,7 +37,7 @@ const ThreadAction = z.enum([
  */
 const ThreadsRequestSchema = BaseToolRequestSchema.extend({
   action: ThreadAction.describe('Action to perform on threads'),
-  thread_id: z.string().optional().describe('Target thread ID (required for label, remove, delete, export actions)'),
+  thread_id: z.string().optional().describe('Target thread ID (required for label, remove, delete, export, auto_label actions)'),
   label: z.string().optional().describe('Label to add/remove (required for label, remove actions)'),
   tags: z.array(z.string()).optional().describe('Optional tags to associate with label'),
   query: z.string().optional().describe('Search query for content/label search'),
@@ -61,6 +63,8 @@ interface ThreadMetadata {
   tags: string[];
   auto_generated_label?: string;
   auto_label_confidence?: number;
+  preview_summary?: string; // 4-sentence AI-generated summary
+  preview_generated?: string; // timestamp when preview was generated
   created: string;
   last_accessed: string;
   last_labeled?: string;
@@ -182,6 +186,9 @@ Remember: Your goal is to make conversation history searchable and organized for
           break;
         case 'export':
           result = await this.exportThread(validated);
+          break;
+        case 'auto_label':
+          result = await this.autoLabelThread(validated);
           break;
         default:
           throw new Error(`Unknown action: ${validated.action}`);
@@ -654,6 +661,231 @@ ${sortedTools.map(([tool, count]) => `- ${tool}: ${count} threads`).join('\n')}`
   }
 
   /**
+   * Auto-generate label using AI content analysis
+   */
+  private async autoLabelThread(args: ThreadsRequest): Promise<ToolOutput> {
+    if (!args.thread_id) {
+      throw new Error('thread_id is required for auto_label action');
+    }
+
+    // Verify thread exists
+    const thread = await getThread(args.thread_id);
+    if (!thread) {
+      throw new Error(`Thread ${args.thread_id} not found or has expired`);
+    }
+
+    try {
+      // Extract conversation content for analysis, filtering out JSON responses
+      const conversationContent = thread.turns
+        .filter(turn => turn.content && turn.content.trim().length > 0)
+        .map(turn => {
+          let content = turn.content.trim();
+          
+          // Filter out JSON responses that might confuse labeling
+          if (content.startsWith('{') && content.includes('"status"')) {
+            // This is likely an AnalyzeTool JSON response, replace with generic text
+            content = '[Technical analysis response]';
+          }
+          
+          return `${turn.role}: ${content}`;
+        })
+        .join('\n\n');
+
+      if (!conversationContent || conversationContent.trim().length < 10) {
+        throw new Error('Insufficient content in thread for auto-labeling');
+      }
+
+      // Use chat tool to generate label (better for conversation analysis)
+      const chatTool = new ChatTool();
+      const analysisResult = await chatTool.execute({
+        prompt: `Analyze this conversation thread and suggest a concise, descriptive label (2-4 words) that captures the main topic or purpose. The label should be useful for organizing and finding this conversation later.
+
+Focus on:
+- Main technical topic or domain
+- Type of activity (debugging, planning, review, etc.)
+- Key technologies or tools mentioned
+- Project or feature being discussed
+
+Return only the suggested label, nothing else.
+
+Conversation content:
+${conversationContent.substring(0, 4000)}`, // Limit to avoid token issues
+        model: 'auto',
+        temperature: 0.3,
+      });
+
+      if (analysisResult.status !== 'success' || !analysisResult.content) {
+        throw new Error('Failed to generate auto-label from content analysis');
+      }
+
+      // Extract the label from the analysis result
+      let labelContent = analysisResult.content.trim();
+      
+      // Handle potential JSON responses (fallback safety)
+      if (labelContent.startsWith('{') && labelContent.includes('"')) {
+        try {
+          const parsed = JSON.parse(labelContent);
+          if (parsed.suggested_label) {
+            labelContent = parsed.suggested_label;
+          } else if (parsed.label) {
+            labelContent = parsed.label;
+          } else {
+            throw new Error('No label found in JSON response');
+          }
+        } catch (jsonError) {
+          // If JSON parsing fails, treat as plain text but warn
+          logger.warn('ChatTool returned unexpected JSON format for label generation');
+          labelContent = labelContent.substring(0, 50); // Use first 50 chars as fallback
+        }
+      }
+      
+      const suggestedLabel = labelContent
+        .replace(/^["']|["']$/g, '') // Remove quotes
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '') // Keep only alphanumeric, spaces, and hyphens
+        .trim()
+        .substring(0, 50); // Limit length
+
+      if (!suggestedLabel || suggestedLabel.length < 3) {
+        throw new Error('Generated label is too short or invalid');
+      }
+
+      // Generate suggested tags based on content
+      const tagAnalysisResult = await chatTool.execute({
+        prompt: `Analyze this conversation and suggest 2-4 relevant tags that would help categorize this thread. Focus on:
+- Programming languages or technologies mentioned
+- Type of development activity (debugging, feature, testing, etc.)
+- Domain or area (frontend, backend, database, etc.)
+
+Return only a comma-separated list of tags, nothing else.
+
+Conversation content:
+${conversationContent.substring(0, 2000)}`,
+        model: 'auto', 
+        temperature: 0.3,
+      });
+
+      let suggestedTags: string[] = [];
+      if (tagAnalysisResult.status === 'success' && tagAnalysisResult.content) {
+        let tagContent = tagAnalysisResult.content.trim();
+        
+        // Handle potential JSON responses (fallback safety)
+        if (tagContent.startsWith('{') && tagContent.includes('"')) {
+          try {
+            const parsed = JSON.parse(tagContent);
+            if (parsed.tags && Array.isArray(parsed.tags)) {
+              tagContent = parsed.tags.join(', ');
+            } else if (parsed.suggested_tags) {
+              tagContent = parsed.suggested_tags;
+            } else {
+              throw new Error('No tags found in JSON response');
+            }
+          } catch (jsonError) {
+            logger.warn('ChatTool returned unexpected JSON format for tag generation');
+            tagContent = tagContent.substring(0, 100); // Use first 100 chars as fallback
+          }
+        }
+        
+        suggestedTags = tagContent
+          .split(',')
+          .map(tag => tag.trim().toLowerCase().replace(/[^a-z0-9-]/g, ''))
+          .filter(tag => tag.length >= 2 && tag.length <= 20)
+          .slice(0, 4);
+      }
+
+      // Generate 4-sentence preview summary
+      const previewSummary = await this.generateThreadPreviewSummary(args.thread_id);
+
+      // Get or create thread metadata
+      const metadataKey = `zenode:thread:meta:${args.thread_id}`;
+      const existingMeta = await this.redisClient!.get(metadataKey);
+      
+      const now = new Date().toISOString();
+      const stats = await getConversationStats(args.thread_id);
+      
+      const metadata: ThreadMetadata = existingMeta ? JSON.parse(existingMeta) : {
+        id: args.thread_id,
+        tags: [],
+        created: thread.created_at,
+        last_accessed: now,
+        total_turns: stats?.total_turns || 0,
+        total_tokens: (stats?.total_input_tokens || 0) + (stats?.total_output_tokens || 0),
+        tools_used: thread.metadata?.tools_used || [],
+      };
+
+      // Update metadata with auto-generated label
+      metadata.auto_generated_label = suggestedLabel;
+      metadata.auto_label_confidence = 0.85; // Fixed confidence for now
+      metadata.last_accessed = now;
+      
+      // Add preview summary if generated
+      if (previewSummary) {
+        metadata.preview_summary = previewSummary;
+        metadata.preview_generated = now;
+      }
+      
+      // If no manual label exists, use auto-generated as primary label
+      if (!metadata.label) {
+        metadata.label = suggestedLabel;
+        metadata.last_labeled = now;
+      }
+
+      // Add suggested tags if not already present
+      if (suggestedTags.length > 0) {
+        metadata.tags = [...new Set([...metadata.tags, ...suggestedTags])];
+      }
+
+      // Save updated metadata
+      await this.redisClient!.setEx(metadataKey, 86400 * 30, JSON.stringify(metadata)); // 30 days TTL
+
+      // Update label index for fast lookup
+      const labelKey = `zenode:label:${suggestedLabel}`;
+      await this.redisClient!.sAdd(labelKey, args.thread_id);
+      await this.redisClient!.expire(labelKey, 86400 * 30);
+
+      // Update tag indices
+      if (suggestedTags.length > 0) {
+        for (const tag of suggestedTags) {
+          const tagKey = `zenode:tag:${tag}`;
+          await this.redisClient!.sAdd(tagKey, args.thread_id);
+          await this.redisClient!.expire(tagKey, 86400 * 30);
+        }
+      }
+
+      logger.info(`Auto-labeled thread ${args.thread_id} as "${suggestedLabel}" with ${suggestedTags.length} tags`);
+
+      return this.formatOutput(
+        `🤖 **Auto-labeling completed**
+
+**Thread:** ${args.thread_id}
+**Generated label:** ${suggestedLabel}
+**Confidence:** ${(metadata.auto_label_confidence * 100).toFixed(1)}%
+**Suggested tags:** ${suggestedTags.join(', ') || 'none'}
+**Total turns analyzed:** ${metadata.total_turns}
+**Tools used:** ${metadata.tools_used.join(', ')}
+${previewSummary ? `\n**Preview summary:** ${previewSummary}` : ''}
+
+${metadata.label === suggestedLabel ? 
+  'The auto-generated label has been set as the primary label.' : 
+  `Manual label "${metadata.label}" was preserved. Auto-label stored as suggestion.`}`,
+        'success'
+      );
+
+    } catch (error) {
+      logger.error(`Auto-labeling failed for thread ${args.thread_id}:`, error);
+      return this.formatOutput(
+        `❌ **Auto-labeling failed**
+
+**Thread:** ${args.thread_id}
+**Error:** ${error instanceof Error ? error.message : 'Unknown error'}
+
+The thread content may be insufficient for analysis, or the analyze tool may be unavailable. Try manual labeling instead.`,
+        'error'
+      );
+    }
+  }
+
+  /**
    * Export thread for sharing
    */
   private async exportThread(args: ThreadsRequest): Promise<ToolOutput> {
@@ -757,7 +989,96 @@ This JSON can be saved to a file and imported into another zenode instance.`,
   }
 
   /**
-   * Generate a preview of thread content
+   * Generate a 4-sentence AI summary of thread content for preview
+   */
+  private async generateThreadPreviewSummary(threadId: string): Promise<string | null> {
+    try {
+      const thread = await getThread(threadId);
+      if (!thread || !thread.turns || thread.turns.length === 0) {
+        return null;
+      }
+
+      // Extract conversation content for analysis (limit to avoid token issues)
+      const conversationContent = thread.turns
+        .filter(turn => turn.content && turn.content.trim().length > 0)
+        .map(turn => {
+          let content = turn.content.trim();
+          
+          // Filter out JSON responses that might confuse summary generation
+          if (content.startsWith('{') && content.includes('"status"')) {
+            // This is likely an AnalyzeTool JSON response, replace with generic text
+            content = '[Technical analysis response]';
+          }
+          
+          return `${turn.role}: ${content}`;
+        })
+        .join('\n\n')
+        .substring(0, 3000); // Limit content length
+
+      if (!conversationContent || conversationContent.trim().length < 50) {
+        return null;
+      }
+
+      // Use chat tool to generate 4-sentence summary (better for conversation analysis)
+      const chatTool = new ChatTool();
+      const summaryResult = await chatTool.execute({
+        prompt: `Generate a concise 4-sentence summary of this conversation thread. Focus on:
+1. What was the main topic or problem discussed?
+2. What approach or solution was taken?
+3. What was the key outcome or decision?
+4. What value would this conversation provide for future reference?
+
+Keep each sentence clear and informative. Return only the 4-sentence summary, nothing else.
+
+Conversation content:
+${conversationContent}`,
+        model: 'auto',
+        temperature: 0.3,
+      });
+
+      if (summaryResult.status !== 'success' || !summaryResult.content) {
+        return null;
+      }
+
+      // Clean and validate the summary
+      let summaryContent = summaryResult.content.trim();
+      
+      // Handle potential JSON responses (fallback safety)
+      if (summaryContent.startsWith('{') && summaryContent.includes('"')) {
+        try {
+          const parsed = JSON.parse(summaryContent);
+          if (parsed.summary) {
+            summaryContent = parsed.summary;
+          } else if (parsed.content) {
+            summaryContent = parsed.content;
+          } else {
+            throw new Error('No summary found in JSON response');
+          }
+        } catch (jsonError) {
+          logger.warn('ChatTool returned unexpected JSON format for summary generation');
+          summaryContent = summaryContent.substring(0, 400); // Use first 400 chars as fallback
+        }
+      }
+      
+      const summary = summaryContent
+        .replace(/^[\"']|[\"']$/g, '') // Remove quotes
+        .substring(0, 400); // Limit length
+
+      // Validate it's roughly 4 sentences
+      const sentenceCount = (summary.match(/[.!?]+/g) || []).length;
+      if (sentenceCount < 2 || summary.length < 50) {
+        return null;
+      }
+
+      return summary;
+    } catch (error) {
+      logger.warn(`Failed to generate preview summary for thread ${threadId}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Generate a simple preview of thread content (fallback)
    */
   private async generateThreadPreview(threadId: string): Promise<string> {
     try {

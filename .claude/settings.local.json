@@ -104,7 +104,8 @@
       "mcp__zenode__planner",
       "Bash(git fetch:*)",
       "WebFetch(domain:docs.anthropic.com)",
-      "Bash(:z \"test basic functionality with zenode:chat\")"
+      "Bash(:z \"test basic functionality with zenode:chat\")",
+      "mcp__zenode__threads"
     ],
     "deny": []
   }

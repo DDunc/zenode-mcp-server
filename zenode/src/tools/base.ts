@@ -60,6 +60,14 @@ export const BaseRequestSchema = z.object({
     "base64 data URLs. Useful for UI discussions, diagrams, visual problems, " +
     "error screens, architecture mockups, and visual analysis tasks."
   ),
+  related_threads: z.array(z.string()).optional().describe(
+    "Optional thread IDs to reference for context. The system will automatically " +
+    "inject relevant information from these conversations into the current request."
+  ),
+  smart_context: z.boolean().default(true).describe(
+    "Enable automatic smart context detection and injection from related threads. " +
+    "Set to false to disable automatic context suggestions."
+  ),
 });
 
 /**
@@ -142,6 +150,300 @@ export abstract class BaseTool {
    */
   protected validateArgs<T>(args: any): T {
     return validateToolArgs(this.getZodSchema(), args);
+  }
+
+  /**
+   * Inject smart context from related threads
+   */
+  protected async injectSmartContext(args: any): Promise<{ enhancedArgs: any; contextInfo?: any }> {
+    // Skip context injection if disabled or if this is the threads tool itself
+    if (args.smart_context === false || this.name === 'threads') {
+      return { enhancedArgs: args };
+    }
+
+    try {
+      const { createClient } = await import('redis');
+      const redisClient = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
+      await redisClient.connect();
+
+      let contextThreads: string[] = [];
+      
+      // Use explicitly provided related threads
+      if (args.related_threads && Array.isArray(args.related_threads)) {
+        contextThreads = args.related_threads;
+      }
+      // Auto-detect related threads if smart context is enabled
+      else if (args.smart_context !== false && args.prompt && typeof args.prompt === 'string') {
+        contextThreads = await this.findRelatedThreads(args.prompt, redisClient);
+      }
+
+      let contextInfo = null;
+      if (contextThreads.length > 0) {
+        const contextDetails = await this.buildDetailedContextInfo(contextThreads, redisClient);
+        if (contextDetails) {
+          // Inject context as additional system message or prompt enhancement
+          const originalPrompt = args.prompt || '';
+          args.prompt = `${originalPrompt}
+
+🔗 **Related Context:**
+${contextDetails.contextText}
+
+Please reference this context when relevant to provide better assistance.`;
+          
+          contextInfo = {
+            threadsFound: contextDetails.threads,
+            strategy: args.related_threads ? 'explicit' : 'auto-detected',
+            injected: true
+          };
+        }
+      }
+
+      await redisClient.quit();
+      return { enhancedArgs: args, contextInfo };
+    } catch (error) {
+      logger.warn('Smart context injection failed:', error);
+      return { enhancedArgs: args }; // Return original args if context injection fails
+    }
+  }
+
+  /**
+   * Find related threads based on content similarity
+   */
+  private async findRelatedThreads(prompt: string, redisClient: any): Promise<string[]> {
+    try {
+      // Extract keywords from the prompt
+      const keywords = this.extractKeywords(prompt);
+      if (keywords.length === 0) {
+        return [];
+      }
+
+      const relatedThreads: Array<{ id: string; score: number }> = [];
+      const metadataKeys = await redisClient.keys('zenode:thread:meta:*');
+      
+      // Limit search to avoid performance issues
+      const maxThreadsToCheck = Math.min(metadataKeys.length, 50);
+      
+      for (const key of metadataKeys.slice(0, maxThreadsToCheck)) {
+        try {
+          const metadataStr = await redisClient.get(key);
+          if (!metadataStr) continue;
+          
+          const metadata = JSON.parse(metadataStr);
+          const threadId = key.replace('zenode:thread:meta:', '');
+          
+          // Skip current thread if continuation_id matches
+          if (threadId === prompt) continue;
+          
+          // Calculate relevance score
+          const score = this.calculateContextRelevance(keywords, metadata);
+          if (score > 0.3) { // Threshold for relevance
+            relatedThreads.push({ id: threadId, score });
+          }
+        } catch (error) {
+          logger.warn(`Failed to process metadata for ${key}:`, error);
+        }
+      }
+
+      // Sort by relevance and return top 3
+      return relatedThreads
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 3)
+        .map(t => t.id);
+        
+    } catch (error) {
+      logger.warn('Failed to find related threads:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Extract keywords from prompt for thread matching
+   */
+  private extractKeywords(prompt: string): string[] {
+    const text = prompt.toLowerCase();
+    
+    // Common programming/technical terms that indicate relevance
+    const keywords = [];
+    
+    // Extract file extensions and paths
+    const fileExtensions = text.match(/\.\w+/g) || [];
+    keywords.push(...fileExtensions);
+    
+    // Extract technical terms (simple approach)
+    const technicalTerms = [
+      'error', 'bug', 'fix', 'debug', 'test', 'api', 'database', 'server',
+      'frontend', 'backend', 'authentication', 'auth', 'login', 'security',
+      'performance', 'optimization', 'refactor', 'typescript', 'javascript',
+      'python', 'react', 'node', 'redis', 'docker', 'git', 'deploy',
+      'build', 'compile', 'lint', 'format', 'config', 'setup'
+    ];
+    
+    for (const term of technicalTerms) {
+      if (text.includes(term)) {
+        keywords.push(term);
+      }
+    }
+    
+    // Extract quoted strings (often file names or specific terms)
+    const quotedStrings = text.match(/"([^"]+)"/g) || [];
+    keywords.push(...quotedStrings.map(s => s.replace(/"/g, '')));
+    
+    return [...new Set(keywords)].filter(k => k.length > 2);
+  }
+
+  /**
+   * Calculate relevance score between keywords and thread metadata
+   */
+  private calculateContextRelevance(keywords: string[], metadata: any): number {
+    let score = 0;
+    
+    const searchableText = [
+      metadata.label || '',
+      metadata.tags?.join(' ') || '',
+      metadata.tools_used?.join(' ') || '',
+      metadata.auto_generated_label || ''
+    ].join(' ').toLowerCase();
+    
+    for (const keyword of keywords) {
+      const keywordLower = keyword.toLowerCase();
+      if (searchableText.includes(keywordLower)) {
+        // Boost score based on where the match occurs
+        if ((metadata.label || '').toLowerCase().includes(keywordLower)) {
+          score += 0.5; // High weight for label matches
+        } else if (metadata.tags?.some((tag: string) => tag.toLowerCase().includes(keywordLower))) {
+          score += 0.3; // Medium weight for tag matches
+        } else {
+          score += 0.1; // Lower weight for other matches
+        }
+      }
+    }
+    
+    // Recency boost - more recent threads get higher scores
+    if (metadata.last_accessed) {
+      const daysSinceAccess = (Date.now() - new Date(metadata.last_accessed).getTime()) / (1000 * 60 * 60 * 24);
+      if (daysSinceAccess < 7) {
+        score += 0.2; // Boost for threads accessed in last week
+      }
+    }
+    
+    // Activity boost - threads with more turns are likely more valuable
+    if (metadata.total_turns > 5) {
+      score += 0.1;
+    }
+    
+    return Math.min(1.0, score);
+  }
+
+  /**
+   * Build detailed context information from related threads
+   */
+  private async buildDetailedContextInfo(threadIds: string[], redisClient: any): Promise<{ threads: any[]; contextText: string } | null> {
+    try {
+      const contextParts = [];
+      const threads = [];
+      
+      for (const threadId of threadIds) {
+        const metadataKey = `zenode:thread:meta:${threadId}`;
+        const metadataStr = await redisClient.get(metadataKey);
+        
+        if (metadataStr) {
+          const metadata = JSON.parse(metadataStr);
+          
+          // Store thread info for UI display
+          threads.push({
+            id: threadId,
+            label: metadata.label || 'Unlabeled',
+            tags: metadata.tags || [],
+            turns: metadata.total_turns,
+            tools: metadata.tools_used || [],
+            lastAccessed: metadata.last_accessed,
+            previewSummary: metadata.preview_summary || null,
+            relevanceScore: 0.85 // Placeholder - would be calculated in real implementation
+          });
+          
+          const contextPart = [
+            `• **${metadata.label || 'Unlabeled'}** (${threadId.substring(0, 8)}...)`,
+            `  ${metadata.tags?.length > 0 ? `Tags: ${metadata.tags.slice(0, 3).join(', ')}` : ''}`,
+            `  ${metadata.total_turns} turns, tools: ${metadata.tools_used?.slice(0, 3).join(', ') || 'none'}`
+          ].filter(line => line.trim()).join('\n');
+          
+          contextParts.push(contextPart);
+        }
+      }
+      
+      const contextText = contextParts.length > 0 ? contextParts.join('\n\n') : '';
+      return { threads, contextText };
+    } catch (error) {
+      logger.warn('Failed to build detailed context info:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Build context information from related threads (legacy method)
+   */
+  private async buildContextInfo(threadIds: string[], redisClient: any): Promise<string | null> {
+    try {
+      const contextParts = [];
+      
+      for (const threadId of threadIds) {
+        const metadataKey = `zenode:thread:meta:${threadId}`;
+        const metadataStr = await redisClient.get(metadataKey);
+        
+        if (metadataStr) {
+          const metadata = JSON.parse(metadataStr);
+          const contextPart = [
+            `• **${metadata.label || 'Unlabeled'}** (${threadId.substring(0, 8)}...)`,
+            `  ${metadata.tags?.length > 0 ? `Tags: ${metadata.tags.slice(0, 3).join(', ')}` : ''}`,
+            `  ${metadata.total_turns} turns, tools: ${metadata.tools_used?.slice(0, 3).join(', ') || 'none'}`
+          ].filter(line => line.trim()).join('\n');
+          
+          contextParts.push(contextPart);
+        }
+      }
+      
+      return contextParts.length > 0 ? contextParts.join('\n\n') : null;
+    } catch (error) {
+      logger.warn('Failed to build context info:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Format context suggestion UI for tool responses
+   */
+  protected formatContextSuggestion(contextInfo: any): string {
+    if (!contextInfo || !contextInfo.threadsFound || contextInfo.threadsFound.length === 0) {
+      return '';
+    }
+
+    const threads = contextInfo.threadsFound;
+    const strategy = contextInfo.strategy === 'explicit' ? 'specified' : 'auto-detected';
+    
+    let suggestion = `\n\n🔗 **Related Context ${contextInfo.injected ? 'Applied' : 'Available'}** (${threads.length} ${strategy})\n`;
+    
+    for (const thread of threads) {
+      const relevancePercent = Math.round(thread.relevanceScore * 100);
+      const shortId = thread.id.substring(0, 8);
+      suggestion += `\n• **${thread.label}** (${relevancePercent}% match, ${shortId}...)`;
+      if (thread.tags.length > 0) {
+        suggestion += `\n  Tags: ${thread.tags.slice(0, 3).join(', ')}`;
+      }
+      suggestion += `\n  ${thread.turns} turns using ${thread.tools.slice(0, 2).join(', ')}`;
+      
+      // Add 4-sentence preview summary if available
+      if (thread.previewSummary) {
+        suggestion += `\n  **Preview:** ${thread.previewSummary}`;
+      }
+    }
+
+    if (contextInfo.injected) {
+      suggestion += `\n\n💡 *This context was automatically included in my analysis. Use \`smart_context: false\` to disable.*`;
+    } else {
+      suggestion += `\n\n💡 *Use \`related_threads: ["${threads[0].id}"]\` to include this context.*`;
+    }
+
+    return suggestion;
   }
 
   /**

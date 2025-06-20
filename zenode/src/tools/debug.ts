@@ -161,8 +161,13 @@ export class DebugTool extends BaseTool {
         }
       }
       
-      // Prepare the prompt
-      const fullPrompt = await this.preparePrompt(validatedRequest);
+      // Apply smart context injection
+      const contextResult = await this.injectSmartContext(validatedRequest);
+      const contextEnhancedRequest = contextResult.enhancedArgs;
+      const contextInfo = contextResult.contextInfo;
+      
+      // Prepare the prompt (using enhanced request if context was injected)
+      const fullPrompt = await this.preparePrompt(contextEnhancedRequest);
       
       // Select model
       const model = await this.selectModel(validatedRequest.model);
@@ -207,13 +212,19 @@ export class DebugTool extends BaseTool {
         validatedRequest.files, // Same files were processed by tool
       );
       
+      // Add context suggestion to response if context was found
+      const contextSuggestion = this.formatContextSuggestion(contextInfo);
+      const enhancedContent = response.content + contextSuggestion;
+      
       return this.formatOutput(
-        response.content,
+        enhancedContent,
         'success',
         'text',
         {
           model_used: response.modelName,
           token_usage: response.usage,
+          context_applied: contextInfo?.injected || false,
+          related_threads_found: contextInfo?.threadsFound?.length || 0,
         },
         continuationOffer,
       );
