@@ -18,6 +18,9 @@
  * as defined by the MCP protocol.
  */
 
+// IMPORTANT: Must import MCP-safe console FIRST to override console in MCP mode
+import './utils/mcp-safe-console.js';
+
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -594,118 +597,115 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
+// /**
+//  * CLI Mode Handler - DISABLED
+//  * 
+//  * CLI mode has been disabled to focus on MCP-only operation.
+//  * This was part of the failed "imagen dockerless" branch and caused issues.
+//  * 
+//  * Previous usage: node dist/index.js [toolname] [json_args]
+//  * Example: node dist/index.js seer '{"prompt":"analyze image","images":["/path/to/image.jpg"]}'
+//  */
+// async function runCliMode() {
+//   const toolName = process.argv[2];
+//   const argsJson = process.argv[3] || '{}';
+//   
+//   if (!toolName) {
+//     console.log(`❌ Tool name required. Usage: node dist/index.js <toolname> [json_args]`);
+//     console.log(`Available tools: ${Object.keys(TOOLS).concat(['version']).join(', ')}`);
+//     process.exit(1);
+//   }
+//   
+//   // Suppress winston logging in CLI mode unless debug is enabled
+//   if (!process.env.ZENODE_CLI_DEBUG) {
+//     logger.transports.forEach(transport => {
+//       if (transport instanceof winston.transports.Console) {
+//         transport.silent = true;
+//       }
+//     });
+//   }
+//   
+//   console.log(`🔧 Zenode CLI Mode - Running tool: ${toolName}`);
+//   
+//   try {
+//     const args = JSON.parse(argsJson);
+//     
+//     // Validate API configuration
+//     if (!hasAnyApiConfigured()) {
+//       throw new Error(
+//         'No API keys configured. Please set at least one of: ' +
+//           'GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, or CUSTOM_API_URL',
+//       );
+//     }
+
+//     // Configure providers
+//     await configureProviders();
+//     
+//     let result: any;
+//     
+//     // Route to AI-powered tools
+//     if (toolName in TOOLS) {
+//       console.log(`⚡ Executing ${toolName} tool...`);
+//       const tool = TOOLS[toolName as keyof typeof TOOLS];
+//       if (!tool) {
+//         throw new Error(`Tool ${toolName} not found in registry`);
+//       }
+//       result = await tool.execute(args);
+//       console.log(`✅ ${toolName} completed successfully`);
+//     }
+//     // Handle version tool
+//     else if (toolName === 'version') {
+//       result = formatVersionResponse();
+//     }
+//     // Handle health check for CLI
+//     else if (toolName === 'healthcheck') {
+//       const { healthy, message } = await healthChecker.checkHealthCLI();
+//       console.log(message);
+//       process.exit(healthy ? 0 : 1);
+//     }
+//     // Unknown tool
+//     else {
+//       throw new Error(`Unknown tool: ${toolName}. Available tools: ${Object.keys(TOOLS).concat(['version', 'healthcheck']).join(', ')}`);
+//     }
+//     
+//     // Output result as JSON for programmatic use, or formatted for human reading
+//     if (process.env.ZENODE_CLI_OUTPUT === 'json') {
+//       console.log(JSON.stringify(result, null, 2));
+//     } else {
+//       if (toolName === 'version') {
+//         console.log(result.content?.[0]?.text || 'Version info unavailable');
+//       } else {
+//         console.log('\n📋 Result:');
+//         console.log(result.content || 'No content');
+//         if (result.continuation_offer) {
+//           const offer = result.continuation_offer;
+//           console.log(`\n🔗 Thread: ${offer.thread_id} | Turns: ${offer.stats.total_turns} | Tokens: ${offer.stats.total_input_tokens + offer.stats.total_output_tokens}`);
+//         }
+//       }
+//     }
+//     
+//     // Exit successfully in CLI mode
+//     process.exit(0);
+//     
+//   } catch (error) {
+//     console.error(`❌ CLI Error:`, error instanceof Error ? error.message : error);
+//     process.exit(1);
+//   }
+// }
+
 /**
- * CLI Mode Handler
+ * Main entry point - MCP Server Mode Only
  * 
- * Enables zenode to run as both MCP server and CLI tool
- * Usage: node dist/index.js [toolname] [json_args]
- * Example: node dist/index.js seer '{"prompt":"analyze image","images":["/path/to/image.jpg"]}'
- */
-async function runCliMode() {
-  const toolName = process.argv[2];
-  const argsJson = process.argv[3] || '{}';
-  
-  if (!toolName) {
-    console.log(`❌ Tool name required. Usage: node dist/index.js <toolname> [json_args]`);
-    console.log(`Available tools: ${Object.keys(TOOLS).concat(['version']).join(', ')}`);
-    process.exit(1);
-  }
-  
-  // Suppress winston logging in CLI mode unless debug is enabled
-  if (!process.env.ZENODE_CLI_DEBUG) {
-    logger.transports.forEach(transport => {
-      if (transport instanceof winston.transports.Console) {
-        transport.silent = true;
-      }
-    });
-  }
-  
-  console.log(`🔧 Zenode CLI Mode - Running tool: ${toolName}`);
-  
-  try {
-    const args = JSON.parse(argsJson);
-    
-    // Validate API configuration
-    if (!hasAnyApiConfigured()) {
-      throw new Error(
-        'No API keys configured. Please set at least one of: ' +
-          'GEMINI_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, or CUSTOM_API_URL',
-      );
-    }
-
-    // Configure providers
-    await configureProviders();
-    
-    let result: any;
-    
-    // Route to AI-powered tools
-    if (toolName in TOOLS) {
-      console.log(`⚡ Executing ${toolName} tool...`);
-      const tool = TOOLS[toolName as keyof typeof TOOLS];
-      if (!tool) {
-        throw new Error(`Tool ${toolName} not found in registry`);
-      }
-      result = await tool.execute(args);
-      console.log(`✅ ${toolName} completed successfully`);
-    }
-    // Handle version tool
-    else if (toolName === 'version') {
-      result = formatVersionResponse();
-    }
-    // Handle health check for CLI
-    else if (toolName === 'healthcheck') {
-      const { healthy, message } = await healthChecker.checkHealthCLI();
-      console.log(message);
-      process.exit(healthy ? 0 : 1);
-    }
-    // Unknown tool
-    else {
-      throw new Error(`Unknown tool: ${toolName}. Available tools: ${Object.keys(TOOLS).concat(['version', 'healthcheck']).join(', ')}`);
-    }
-    
-    // Output result as JSON for programmatic use, or formatted for human reading
-    if (process.env.ZENODE_CLI_OUTPUT === 'json') {
-      console.log(JSON.stringify(result, null, 2));
-    } else {
-      if (toolName === 'version') {
-        console.log(result.content?.[0]?.text || 'Version info unavailable');
-      } else {
-        console.log('\n📋 Result:');
-        console.log(result.content || 'No content');
-        if (result.continuation_offer) {
-          const offer = result.continuation_offer;
-          console.log(`\n🔗 Thread: ${offer.thread_id} | Turns: ${offer.stats.total_turns} | Tokens: ${offer.stats.total_input_tokens + offer.stats.total_output_tokens}`);
-        }
-      }
-    }
-    
-    // Exit successfully in CLI mode
-    process.exit(0);
-    
-  } catch (error) {
-    console.error(`❌ CLI Error:`, error instanceof Error ? error.message : error);
-    process.exit(1);
-  }
-}
-
-/**
- * Main entry point - detects MCP vs CLI mode
+ * CLI mode detection has been disabled to focus on MCP-only operation.
+ * This was causing issues from the failed "imagen dockerless" branch.
  */
 
 async function startZenode() {
-  // Check if CLI arguments are provided
-  const hasCliArgs = process.argv.length > 2;
-  
-  if (hasCliArgs) {
-    // CLI Mode: node dist/index.js toolname args
-    await runCliMode();
-  } else {
-    // MCP Server Mode: Default behavior for MCP clients
-    await main();
-  }
+  // MCP Server Mode Only - CLI mode disabled
+  await main();
 }
 
-// Start zenode in appropriate mode
+// Start zenode in MCP server mode only
 startZenode().catch((error) => {
   logger.error('Unhandled error:', error);
   process.exit(1);

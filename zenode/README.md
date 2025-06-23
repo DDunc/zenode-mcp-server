@@ -6,6 +6,31 @@ A high-performance Node.js implementation of the Model Context Protocol (MCP) se
 
 This unusual folder structure is temporary but beneficial for LLM and agent-assisted coding. One intent of this project is to continually pull and port improvements from  zen-mcp-server upstream.
 
+## 🏃 QUICKSTART
+
+**Fastest way to test Zenode (under 60 seconds):**
+
+```bash
+# 1. Clone the repo
+git clone https://github.com/yourusername/zen-mcp-server.git
+cd zen-mcp-server/zenode
+
+# 2. Copy the simple quickstart script
+cp simple-mcp-example.sh simple-mcp.sh
+
+# 3. Edit simple-mcp.sh and add your OpenRouter API key
+# Replace sk-or-v1-YOUR-OPENROUTER-KEY-HERE with your actual key
+# Get a key from: https://openrouter.ai/keys
+
+# 4. Make it executable and run
+chmod +x simple-mcp.sh
+./simple-mcp.sh
+
+# That's it! Zenode is now running 🎉
+```
+
+For production use, see the full [Quick Start](#quick-start) guide below.
+
 # Who Should Use This Library
 * Anyone interested in building their own mcp-tools, plugins, etc in Node.js with the help of an agency framework
 * Anyone interested in previewing a project under rapid development with an experimental approach to QoL tooling, composition, and extension

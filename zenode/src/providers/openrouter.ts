@@ -301,6 +301,15 @@ export class OpenRouterProvider extends BaseModelProvider {
   }
 
   /**
+   * Get list of available models (ensure initialization)
+   */
+  getAvailableModels(): string[] {
+    // Note: This is a synchronous method but initialization is async
+    // Return what we have, even if initialization isn't complete
+    return super.getAvailableModels();
+  }
+
+  /**
    * Get image capabilities for OpenRouter models
    */
   async getImageCapabilities(modelName: string): Promise<ImageCapabilities> {

@@ -137,8 +137,8 @@ export class HealthTool implements BaseTool {
     if (checks.mcp_connection?.status === 'fail') {
       tips += `**MCP Connection Issues:**\n`;
       tips += `- Check Docker containers: \`docker-compose ps\`\n`;
-      tips += `- Restart containers: \`docker-compose restart zenode-server\`\n`;
-      tips += `- Check logs: \`docker-compose logs zenode-server --tail=50\`\n\n`;
+      tips += `- Restart containers: \`docker-compose restart zenode\`\n`;
+      tips += `- Check logs: \`docker-compose logs zenode-mcp --tail=50\`\n\n`;
     }
     
     if (checks.providers?.status === 'fail') {
@@ -187,11 +187,11 @@ export class HealthTool implements BaseTool {
       // For now, return a placeholder that explains where logs are
       return `## 📋 **Recent Logs**\n\n` +
              `**Log Locations:**\n` +
-             `- Main logs: \`docker-compose logs zenode-server --tail=50\`\n` +
-             `- Activity logs: \`docker-compose logs zenode-server | grep "TOOL_CALL\\|MCP_CONNECTION"\`\n` +
-             `- Error logs: \`docker-compose logs zenode-server | grep "ERROR\\|FAILED"\`\n\n` +
+             `- Main logs: \`docker-compose logs zenode-mcp --tail=50\`\n` +
+             `- Activity logs: \`docker-compose logs zenode-mcp | grep "TOOL_CALL\\|MCP_CONNECTION"\`\n` +
+             `- Error logs: \`docker-compose logs zenode-mcp | grep "ERROR\\|FAILED"\`\n\n` +
              `**Live monitoring:**\n` +
-             `\`docker-compose logs -f zenode-server\``;
+             `\`docker-compose logs -f zenode-mcp\``;
     } catch (error) {
       return `## 📋 **Recent Logs**\n\n❌ Could not retrieve logs: ${error instanceof Error ? error.message : String(error)}`;
     }

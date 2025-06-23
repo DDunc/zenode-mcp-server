@@ -103,3 +103,13 @@ workspace/
 
 # Docker-related zenode files
 docker-compose.override.yml
+
+# Security: Exclude potentially sensitive scripts
+simple-mcp.sh
+*-credentials.sh
+*-secrets.sh
+local-env.sh
+
+# But keep the example and security tools
+!simple-mcp-example.sh
+!check-secrets.sh

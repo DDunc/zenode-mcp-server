@@ -108,11 +108,19 @@ export class ThreadsTool extends BaseTool {
 
   constructor() {
     super();
-    this.initializeRedis();
+    // Only initialize Redis if not disabled
+    if (process.env.DISABLE_ALL_REDIS !== 'true') {
+      this.initializeRedis();
+    } else {
+      logger.info('[THREADS] Redis initialization skipped (disabled via environment variable)');
+    }
   }
 
   private async initializeRedis(): Promise<void> {
     try {
+      // Add delay to avoid connection conflicts with conversation-memory Redis client
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
       this.redisClient = createClient({ url: REDIS_URL });
       await this.redisClient.connect();
       logger.debug('[THREADS] Redis client connected');

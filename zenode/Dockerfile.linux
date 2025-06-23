@@ -1,0 +1,99 @@
+# Zenode MCP Server - Linux (AMD64) Production Dockerfile
+# Optimized for remote deployment on Linux servers (amd64 architecture)
+# Production-ready with enhanced security and monitoring
+
+ARG NODE_VERSION=20
+ARG ALPINE_VERSION=3.20
+
+# Build stage - AMD64 optimized
+FROM amd64/node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS builder
+
+# Install build dependencies
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    git \
+    && ln -sf python3 /usr/bin/python
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Install dependencies with production optimizations
+RUN npm ci --include=dev --platform=linux --arch=x64
+
+# Copy source code
+COPY . .
+
+# Build TypeScript
+RUN npm run build
+
+# Production stage - Minimal security-hardened image
+FROM amd64/node:${NODE_VERSION}-alpine${ALPINE_VERSION}
+
+# Install minimal runtime dependencies
+RUN apk add --no-cache \
+    tini \
+    curl \
+    ca-certificates \
+    && rm -rf /var/cache/apk/* \
+    && update-ca-certificates
+
+# Create unprivileged user with minimal permissions
+RUN addgroup -g 1001 -S zenode && \
+    adduser -S zenode -u 1001 -G zenode \
+    -h /home/zenode -s /bin/sh
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production --platform=linux --arch=x64 \
+    --no-audit --no-fund --ignore-scripts && \
+    npm cache clean --force
+
+# Copy application with proper ownership
+COPY --from=builder --chown=zenode:zenode /app/dist ./dist
+COPY --from=builder --chown=zenode:zenode /app/systemprompts ./systemprompts
+COPY --from=builder --chown=zenode:zenode /app/conf ./conf
+
+# Copy configuration files
+COPY --chown=zenode:zenode zenode-config.json* ./
+COPY --chown=zenode:zenode zenode.config.* ./
+COPY --chown=zenode:zenode bootstrap-config.json ./
+
+# Create secure directories
+RUN mkdir -p /tmp/zenode-logs /workspace /home/zenode/.zenode && \
+    chown -R zenode:zenode /tmp/zenode-logs /workspace /app /home/zenode
+
+# Switch to unprivileged user
+USER zenode
+
+# Production environment variables
+ENV NODE_ENV=production \
+    MCP_WORKSPACE=/workspace \
+    LOG_LEVEL=info \
+    PLATFORM=linux \
+    DEPLOYMENT=remote \
+    NODE_OPTIONS="--max-old-space-size=1024"
+
+# Security: Run as non-root with tini for signal handling
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "dist/index.js"]
+
+# Enhanced health check for production
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
+    CMD node -e "process.exit(0)" || exit 1
+
+# Production metadata
+LABEL maintainer="Zenode MCP Server" \
+      description="Linux production MCP server for remote deployment" \
+      platform="linux/amd64" \
+      version="1.0.0-linux" \
+      security.non-root="true" \
+      deployment="production"

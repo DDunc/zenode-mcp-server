@@ -42,7 +42,7 @@ export interface ConversationMetadata {
 }
 
 export class RedisConversationLogger {
-  private redis: RedisClient;
+  private redis: RedisClient | null = null;
   private logDirectory: string;
   private isEnabled: boolean;
   
@@ -66,18 +66,55 @@ export class RedisConversationLogger {
     logDirectory: string = './conversation-logs',
     enabled: boolean = true
   ) {
-    this.redis = createClient({ url: redisUrl });
     this.logDirectory = logDirectory;
     this.isEnabled = enabled;
+    
+    if (!this.isEnabled) {
+      logger.info('Redis conversation logger is disabled - skipping Redis client creation');
+      return; // Don't create Redis client when disabled
+    }
+    
+    this.redis = createClient({ url: redisUrl });
     
     this.redis.on('error', (error: Error) => {
       logger.error('Redis conversation logger error:', error);
     });
     
-    // Connect to Redis
-    this.redis.connect().catch((error: Error) => {
-      logger.error('Failed to connect to Redis:', error);
+    this.redis.on('reconnecting', () => {
+      logger.warn('Redis Client Reconnecting');
     });
+    
+    // Connect to Redis with retry logic
+    this.connectWithRetry();
+  }
+
+  /**
+   * Connect to Redis with exponential backoff retry
+   */
+  private async connectWithRetry(maxRetries: number = 10): Promise<void> {
+    if (!this.redis) {
+      logger.warn('Redis conversation logger: No Redis client to connect (disabled)');
+      return;
+    }
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        await this.redis.connect();
+        logger.info(`✅ Redis conversation logger connected successfully on attempt ${attempt}`);
+        return;
+      } catch (error) {
+        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 30000); // Max 30 seconds
+        logger.warn(`Redis conversation logger attempt ${attempt}/${maxRetries} failed, retrying in ${waitTime}ms...`);
+        
+        if (attempt === maxRetries) {
+          logger.error('❌ Redis conversation logger failed after all retries. Conversation logging disabled.');
+          this.isEnabled = false;
+          return;
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+    }
   }
 
   /**
@@ -130,6 +167,10 @@ export class RedisConversationLogger {
     duration?: number,
     conversationId?: string
   ): Promise<void> {
+    if (!this.redis || !this.isEnabled) {
+      return; // Skip if Redis is not available or disabled
+    }
+    
     // Check if we have a corresponding request
     const requestKey = `zenode:conversation:request:${requestId}`;
     const hasRequest = await this.redis.exists(requestKey);
@@ -163,6 +204,10 @@ export class RedisConversationLogger {
    * Store entry in Redis
    */
   private async storeEntry(entry: ConversationLogEntry): Promise<void> {
+    if (!this.redis || !this.isEnabled) {
+      return; // Skip if Redis is not available or disabled
+    }
+    
     const entryKey = `zenode:conversation:${entry.phase}:${entry.requestId}`;
     const conversationKey = `zenode:conversation:meta:${entry.conversationId || 'default'}`;
     
@@ -203,6 +248,8 @@ export class RedisConversationLogger {
       // Get request and response entries
       const requestKey = `zenode:conversation:request:${requestId}`;
       const responseKey = `zenode:conversation:response:${requestId}`;
+      
+      if (!this.redis) return;
       
       const [requestData, responseData] = await Promise.all([
         this.redis.get(requestKey),
@@ -260,7 +307,7 @@ export class RedisConversationLogger {
     const now = new Date();
     let toolsUsed: string[] = [];
 
-    if (conversationId) {
+    if (conversationId && this.redis) {
       const metaKey = `zenode:conversation:meta:${conversationId}:tools`;
       toolsUsed = await this.redis.sMembers(metaKey);
     }
@@ -374,6 +421,10 @@ logger: "redis-conversation-logger"
    * Get conversation metadata
    */
   async getConversationMetadata(conversationId: string): Promise<ConversationMetadata | null> {
+    if (!this.redis || !this.isEnabled) {
+      return null; // Redis not available or disabled
+    }
+    
     const metaKey = `zenode:conversation:meta:${conversationId}`;
     const toolsKey = `${metaKey}:tools`;
     
@@ -398,6 +449,10 @@ logger: "redis-conversation-logger"
    * List recent conversations
    */
   async listRecentConversations(limit: number = 10): Promise<ConversationMetadata[]> {
+    if (!this.redis || !this.isEnabled) {
+      return []; // Redis not available or disabled
+    }
+    
     const keys = await this.redis.keys('zenode:conversation:meta:*');
     const conversations: ConversationMetadata[] = [];
 
@@ -421,9 +476,16 @@ logger: "redis-conversation-logger"
    * Close Redis connection
    */
   async close(): Promise<void> {
-    await this.redis.disconnect();
+    if (this.redis) {
+      await this.redis.disconnect();
+    }
   }
 }
 
-// Create singleton instance
-export const redisConversationLogger = new RedisConversationLogger();
+// Create singleton instance - check for Redis disable flags
+const isRedisEnabled = process.env.DISABLE_ALL_REDIS !== 'true';
+export const redisConversationLogger = new RedisConversationLogger(
+  process.env.REDIS_URL || 'redis://redis:6379/0',
+  './conversation-logs', 
+  isRedisEnabled
+);

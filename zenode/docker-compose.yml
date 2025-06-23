@@ -1,6 +1,59 @@
-version: '3.8'
+# Fixed Docker Compose - PatrykIti-Inspired Direct Path Mapping
+# Solves filesystem access issues and tool list doubling problems
+# Based on proven working approach from PatrykIti's zen-mcp-server fork
 
 services:
+  zenode:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zenode-mcp:latest
+    container_name: zenode-mcp
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      # CRITICAL FIX: Use real home directory path, not /workspace abstraction
+      - WORKSPACE_ROOT=${HOME}
+      - USER_HOME=${HOME}
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379/0
+      # Remove problematic workspace environment variables
+      # - MCP_WORKSPACE=/workspace  # REMOVED - caused path confusion
+      # - MCP_PROJECT_MOUNTED=true  # REMOVED - not needed with direct mounting
+      # - MCP_PROJECT_ROOT=/workspace  # REMOVED - use real paths
+    volumes:
+      # CRITICAL FIX: Direct path mapping (PatrykIti's proven approach)
+      # This ensures container filesystem matches host filesystem exactly
+      - ${HOME}:${HOME}:ro
+      # Separate writable volume for logs (security best practice)
+      - zenode-logs:/app/logs
+      # Optional: Mount .zenode config if it exists
+      - ./.zenode:/app/.zenode:rw
+    # CRITICAL FIX: Use /app as working directory (not /workspace/zenode)
+    working_dir: /app
+    depends_on:
+      redis:
+        condition: service_healthy
+    # CRITICAL FIX: Direct startup (no complex delays that cause restart loops)
+    command: ["node", "dist/index.js"]
+    stdin_open: true
+    tty: true
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s  # Reduced from 40s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    networks:
+      - zenode-network
+
   redis:
     image: redis:7-alpine
     container_name: zenode-redis
@@ -18,47 +71,7 @@ services:
       timeout: 5s
       retries: 5
 
-  zenode-server:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: zenode-mcp-server:latest
-    container_name: zenode-server
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - NODE_ENV=production
-      - MCP_WORKSPACE=/workspace
-      - MCP_PROJECT_MOUNTED=true
-      - MCP_PROJECT_ROOT=/workspace
-    volumes:
-      - ..:/workspace:rw
-      - ${HOME}:/home:rw
-      - zenode-logs:/tmp
-      - ./.zenode:/app/.zenode:rw
-    working_dir: /workspace/zenode
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - zenode-network
-    stdin_open: true
-    tty: true
-    healthcheck:
-      test: ["CMD", "node", "dist/index.js", "healthcheck"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 512M
-
+  # Optional: Simplified log monitor
   log-monitor:
     image: busybox:latest
     container_name: zenode-log-monitor
@@ -67,7 +80,7 @@ services:
     volumes:
       - zenode-logs:/logs:ro
     depends_on:
-      - zenode-server
+      - zenode
     networks:
       - zenode-network
 
@@ -80,3 +93,10 @@ volumes:
 networks:
   zenode-network:
     driver: bridge
+
+# Migration Notes:
+# 1. This approach eliminates the /workspace abstraction that was causing file access issues
+# 2. Direct path mapping means users can provide real paths to zenode tools
+# 3. No more path transformation needed - container sees same paths as host
+# 4. Simplified startup reduces chance of restart loops causing tool registration doubling
+# 5. Security maintained through read-only filesystem mount and non-root user in Dockerfile

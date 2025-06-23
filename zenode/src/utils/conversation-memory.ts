@@ -22,11 +22,18 @@ const CONVERSATION_TTL = 10800; // 3 hours in seconds (increased from 24h for be
 const KEY_PREFIX = 'zenode:conversation:';
 
 /**
- * Initialize Redis connection
+ * Initialize Redis connection with retry logic
  */
 export async function initializeRedis(): Promise<void> {
   if (redisClient) {
     return; // Already initialized
+  }
+
+  // Temporary debug flag to disable Redis conversation memory
+  if (process.env.DISABLE_REDIS_CONVERSATION_MEMORY === 'true') {
+    logger.info('Redis conversation memory disabled via environment variable');
+    redisClient = null;
+    return;
   }
 
   try {
@@ -39,11 +46,34 @@ export async function initializeRedis(): Promise<void> {
     redisClient.on('ready', () => logger.info('Redis Client Ready'));
     redisClient.on('reconnecting', () => logger.warn('Redis Client Reconnecting'));
 
-    await redisClient.connect();
+    await connectWithRetry(redisClient);
   } catch (error) {
     logger.error('Failed to connect to Redis:', error);
     // Continue without Redis - conversations won't persist
     redisClient = null;
+  }
+}
+
+/**
+ * Connect to Redis with exponential backoff retry
+ */
+async function connectWithRetry(client: RedisClientType, maxRetries: number = 10): Promise<void> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await client.connect();
+      logger.info(`✅ Redis conversation memory connected successfully on attempt ${attempt}`);
+      return;
+    } catch (error) {
+      const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 30000); // Max 30 seconds
+      logger.warn(`Redis conversation memory attempt ${attempt}/${maxRetries} failed, retrying in ${waitTime}ms...`);
+      
+      if (attempt === maxRetries) {
+        logger.error('❌ Redis conversation memory failed after all retries. Conversation persistence disabled.');
+        throw error; // Re-throw to trigger the catch block in initializeRedis
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
   }
 }
 
@@ -927,7 +957,11 @@ function generateThreadId(): string {
 }
 
 
-// Initialize Redis on module load
-initializeRedis().catch((error) => {
-  logger.error('Failed to initialize Redis on module load:', error);
-});
+// Initialize Redis on module load (only if not disabled)
+if (process.env.DISABLE_REDIS_CONVERSATION_MEMORY !== 'true' && process.env.DISABLE_ALL_REDIS !== 'true') {
+  initializeRedis().catch((error) => {
+    logger.error('Failed to initialize Redis on module load:', error);
+  });
+} else {
+  logger.info('Redis conversation memory initialization skipped (disabled via environment variable)');
+}

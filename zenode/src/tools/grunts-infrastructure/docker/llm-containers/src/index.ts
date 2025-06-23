@@ -53,7 +53,7 @@ import { ConfigTool } from './tools/config.js';
 // This name is used by MCP clients to identify and connect to this specific server
 const server = new Server(
   {
-    name: 'zenode-server',
+    name: 'zenode-mcp',
     version: VERSION,
   },
   {

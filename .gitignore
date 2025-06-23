@@ -195,3 +195,9 @@ CLAUDE.local.md
 logs/
 *.backup
 /.desktop_configured
+
+# context gits
+patrickyti-zen-mcp-server/
+patrickyti-zen-mcp-server/*
+zenode/tmp*
+zenode/tmp/

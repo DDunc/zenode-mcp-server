@@ -15,33 +15,22 @@ import { logger } from './logger.js';
 export function resolveZenodePath(inputPath: string): string {
   // Handle absolute paths
   if (path.isAbsolute(inputPath)) {
-    // If absolute path starts with /workspace, use as-is
-    if (inputPath.startsWith('/workspace')) {
-      return inputPath;
-    }
-    // If absolute path starts with /Users or /home, map to workspace
-    if (inputPath.startsWith('/Users/') || inputPath.startsWith('/home/')) {
-      // Extract the part after the home directory
-      const parts = inputPath.split('/');
-      const userIndex = parts.findIndex(p => p === 'Users' || p === 'home');
-      if (userIndex >= 0 && userIndex + 2 < parts.length) {
-        const relativePath = parts.slice(userIndex + 2).join('/');
-        return path.join('/workspace', relativePath);
-      }
-    }
-    // For other absolute paths, assume they're workspace-relative
+    // FIXED: Direct path mapping approach - use actual paths instead of /workspace transformation
+    // Since Docker volumes now mount ${HOME}:${HOME}, we use actual paths directly
     return inputPath;
   }
 
   // Handle relative paths
   if (inputPath.startsWith('./') || inputPath.startsWith('../')) {
-    // Relative to current working directory (/workspace/zenode)
+    // Relative to current working directory  
     return path.resolve(inputPath);
   }
 
   // Handle home directory shortcuts
   if (inputPath.startsWith('~/')) {
-    return path.join('/workspace', inputPath.slice(2));
+    // FIXED: Use actual home directory instead of /workspace
+    const homeDir = process.env.HOME || process.env.USERPROFILE || '/';
+    return path.join(homeDir, inputPath.slice(2));
   }
 
   // Default: treat as relative to zenode directory
@@ -302,7 +291,6 @@ export function formatFileSize(bytes: number): string {
  */
 export async function estimateFileTokens(filePath: string): Promise<number> {
   try {
-    const translatedPath = translatePathForEnvironment(filePath);
     const stats = await getFileStats(filePath);
     const sizeInBytes = stats.size;
     

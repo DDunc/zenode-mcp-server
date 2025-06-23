@@ -1,67 +1,76 @@
-# Zenode MCP Server Dockerfile
-# Multi-stage build for optimized production image
+# Fixed Zenode Dockerfile - PatrykIti-Inspired Security + Simplicity
+# Optimized for filesystem access and tool registration stability
+# Based on proven working approach from PatrykIti's zen-mcp-server fork
 
-# Build stage
-FROM node:20-alpine AS builder
-
-# Install build dependencies
-RUN apk add --no-cache python3 make g++
-
-WORKDIR /app
-
-# Copy package files
-COPY package*.json ./
-
-# Install all dependencies (including dev)
-RUN npm ci
-
-# Copy source code
-COPY . .
-
-# Build TypeScript
-RUN npm run build
-
-# Production stage
-FROM node:20-alpine
+ARG NODE_VERSION=20
+FROM node:${NODE_VERSION}-alpine
 
 # Install runtime dependencies
-RUN apk add --no-cache tini
+RUN apk add --no-cache \
+    git \
+    tini \
+    && rm -rf /var/cache/apk/*
 
+# Set working directory
 WORKDIR /app
 
-# Copy package files
+# Create non-root user for security (PatrykIti's pattern)
+# Use a different GID if 1000 is taken
+RUN addgroup -S mcpuser && \
+    adduser -S mcpuser -G mcpuser
+
+# Copy package files for better layer caching
 COPY package*.json ./
+COPY tsconfig.json ./
 
-# Install only production dependencies without running scripts
-RUN npm ci --only=production --ignore-scripts && npm cache clean --force
+# Install dependencies
+RUN npm ci --only=production --no-audit --no-fund && \
+    npm cache clean --force
 
-# Copy built application
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/systemprompts ./systemprompts
-COPY --from=builder /app/conf ./conf
+# Copy built application (assumes you run npm run build before docker build)
+COPY dist/ ./dist/
+COPY conf/ ./conf/
+COPY systemprompts/ ./systemprompts/
 
 # Copy configuration files if they exist
-COPY --from=builder /app/zenode-config.json* ./
-COPY --from=builder /app/zenode.config.* ./
-COPY --from=builder /app/bootstrap-config.json ./
+COPY zenode-config.json* ./
+COPY zenode.config.* ./
+COPY bootstrap-config.json ./
 
-# Create non-root user
-RUN addgroup -g 1001 -S zenode && \
-    adduser -S zenode -u 1001 -G zenode && \
-    chown -R zenode:zenode /app
+# Create logs directory and set permissions
+RUN mkdir -p /app/logs && \
+    chown -R mcpuser:mcpuser /app
 
-# Create log directory and project mount point
-RUN mkdir -p /tmp && chown zenode:zenode /tmp && \
-    mkdir -p /project && chown zenode:zenode /project
+# Switch to non-root user (security best practice from PatrykIti)
+USER mcpuser
 
-USER zenode
+# Set environment variables for production
+ENV NODE_ENV=production \
+    LOG_LEVEL=info
 
-# Use tini for proper signal handling
+# Use tini for proper signal handling in containers
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# Run the server
+# CRITICAL FIX: Direct startup (no complex orchestration that causes restart loops)
 CMD ["node", "dist/index.js"]
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
+# Health check using simple Node.js check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD node -e "process.exit(0)" || exit 1
+
+# Metadata labels
+LABEL maintainer="Zenode MCP Server" \
+      description="Fixed filesystem access MCP server for AI tools" \
+      version="1.0.1" \
+      org.opencontainers.image.source="https://github.com/BeehiveInnovations/zen-mcp-server"
+
+# Build Instructions:
+# 1. Run: npm run build  (before docker build)
+# 2. Run: docker build -f Dockerfile-fixed -t zenode-mcp:fixed .
+# 3. Use docker-compose-fixed.yml for deployment
+#
+# Key Fixes:
+# - Simplified startup process (no complex delays)
+# - Non-root user for security
+# - Direct filesystem access support
+# - Reduced container restart potential

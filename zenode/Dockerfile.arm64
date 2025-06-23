@@ -1,0 +1,88 @@
+# Zenode MCP Server - Apple Silicon (ARM64) Optimized Dockerfile
+# Specifically optimized for Apple Silicon M1/M2/M3 development environments
+# Uses ARM64 base images for maximum performance on Apple Silicon
+
+ARG NODE_VERSION=20
+ARG ALPINE_VERSION=3.20
+
+# Build stage - ARM64 optimized
+FROM arm64v8/node:${NODE_VERSION}-alpine${ALPINE_VERSION} AS builder
+
+# Install build dependencies optimized for ARM64
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    git \
+    && ln -sf python3 /usr/bin/python
+
+WORKDIR /app
+
+# Copy package files for dependency installation
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Install dependencies with ARM64 optimizations
+RUN npm ci --include=dev --platform=linux --arch=arm64
+
+# Copy source code
+COPY . .
+
+# Build TypeScript
+RUN npm run build
+
+# Production stage - ARM64 optimized runtime
+FROM arm64v8/node:${NODE_VERSION}-alpine${ALPINE_VERSION}
+
+# Install runtime dependencies for ARM64
+RUN apk add --no-cache \
+    tini \
+    curl \
+    && rm -rf /var/cache/apk/*
+
+# Create zenode user
+RUN addgroup -g 1001 -S zenode && \
+    adduser -S zenode -u 1001 -G zenode
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies for ARM64
+RUN npm ci --only=production --platform=linux --arch=arm64 --no-audit --no-fund && \
+    npm cache clean --force
+
+# Copy application from builder
+COPY --from=builder --chown=zenode:zenode /app/dist ./dist
+COPY --from=builder --chown=zenode:zenode /app/systemprompts ./systemprompts
+COPY --from=builder --chown=zenode:zenode /app/conf ./conf
+
+# Copy config files
+COPY --chown=zenode:zenode zenode-config.json* ./
+COPY --chown=zenode:zenode zenode.config.* ./
+COPY --chown=zenode:zenode bootstrap-config.json ./
+
+# Create directories
+RUN mkdir -p /tmp/zenode-logs /workspace && \
+    chown -R zenode:zenode /tmp/zenode-logs /workspace /app
+
+USER zenode
+
+# Environment optimized for Apple Silicon development
+ENV NODE_ENV=production \
+    MCP_WORKSPACE=/workspace \
+    LOG_LEVEL=info \
+    PLATFORM=arm64 \
+    APPLE_SILICON_OPTIMIZED=true
+
+ENTRYPOINT ["/sbin/tini", "--"]
+CMD ["node", "dist/index.js"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD node -e "process.exit(0)" || exit 1
+
+LABEL maintainer="Zenode MCP Server" \
+      description="Apple Silicon optimized MCP server" \
+      platform="arm64" \
+      version="1.0.0-arm64"
