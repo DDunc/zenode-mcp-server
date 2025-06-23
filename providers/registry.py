@@ -24,8 +24,6 @@ class ModelProviderRegistry:
             cls._instance._providers = {}
             cls._instance._initialized_providers = {}
             logging.debug(f"REGISTRY: Created instance {cls._instance}")
-        else:
-            logging.debug(f"REGISTRY: Returning existing instance {cls._instance}")
         return cls._instance
 
     @classmethod
@@ -118,6 +116,7 @@ class ModelProviderRegistry:
             ProviderType.GOOGLE,  # Direct Gemini access
             ProviderType.OPENAI,  # Direct OpenAI access
             ProviderType.XAI,  # Direct X.AI GROK access
+            ProviderType.DIAL,  # DIAL unified API access
             ProviderType.CUSTOM,  # Local/self-hosted models
             ProviderType.OPENROUTER,  # Catch-all for cloud models
         ]
@@ -128,7 +127,6 @@ class ModelProviderRegistry:
         logging.debug(f"Available providers in registry: {list(instance._providers.keys())}")
 
         for provider_type in PROVIDER_PRIORITY_ORDER:
-            logging.debug(f"Checking provider_type: {provider_type}")
             if provider_type in instance._providers:
                 logging.debug(f"Found {provider_type} in registry")
                 # Get or create provider instance
@@ -179,7 +177,21 @@ class ModelProviderRegistry:
                 continue
 
             for model_name in available:
-                if restriction_service and not restriction_service.is_allowed(provider_type, model_name):
+                # =====================================================================================
+                # CRITICAL: Prevent double restriction filtering (Fixed Issue #98)
+                # =====================================================================================
+                # Previously, both the provider AND registry applied restrictions, causing
+                # double-filtering that resulted in "no models available" errors.
+                #
+                # Logic: If respect_restrictions=True, provider already filtered models,
+                # so registry should NOT filter them again.
+                # TEST COVERAGE: tests/test_provider_routing_bugs.py::TestOpenRouterAliasRestrictions
+                # =====================================================================================
+                if (
+                    restriction_service
+                    and not respect_restrictions  # Only filter if provider didn't already filter
+                    and not restriction_service.is_allowed(provider_type, model_name)
+                ):
                     logging.debug("Model %s filtered by restrictions", model_name)
                     continue
                 models[model_name] = provider_type
@@ -223,6 +235,7 @@ class ModelProviderRegistry:
             ProviderType.XAI: "XAI_API_KEY",
             ProviderType.OPENROUTER: "OPENROUTER_API_KEY",
             ProviderType.CUSTOM: "CUSTOM_API_KEY",  # Can be empty for providers that don't need auth
+            ProviderType.DIAL: "DIAL_API_KEY",
         }
 
         env_var = key_mapping.get(provider_type)
@@ -313,7 +326,11 @@ class ModelProviderRegistry:
                 return xai_models[0]
             elif gemini_available and any("flash" in m for m in gemini_models):
                 # Find the flash model (handles full names)
-                return next(m for m in gemini_models if "flash" in m)
+                # Prefer 2.5 over 2.0 for backward compatibility
+                flash_models = [m for m in gemini_models if "flash" in m]
+                # Sort to ensure 2.5 comes before 2.0
+                flash_models_sorted = sorted(flash_models, reverse=True)
+                return flash_models_sorted[0]
             elif gemini_available and gemini_models:
                 # Fall back to any available Gemini model
                 return gemini_models[0]
@@ -339,7 +356,10 @@ class ModelProviderRegistry:
         elif xai_available and xai_models:
             return xai_models[0]
         elif gemini_available and any("flash" in m for m in gemini_models):
-            return next(m for m in gemini_models if "flash" in m)
+            # Prefer 2.5 over 2.0 for backward compatibility
+            flash_models = [m for m in gemini_models if "flash" in m]
+            flash_models_sorted = sorted(flash_models, reverse=True)
+            return flash_models_sorted[0]
         elif gemini_available and gemini_models:
             return gemini_models[0]
         elif openrouter_available:
@@ -381,8 +401,8 @@ class ModelProviderRegistry:
         if openrouter_provider:
             # Prefer models known for deep reasoning
             preferred_models = [
-                "anthropic/claude-3.5-sonnet",
-                "anthropic/claude-3-opus-20240229",
+                "anthropic/claude-sonnet-4",
+                "anthropic/claude-opus-4",
                 "google/gemini-2.5-pro",
                 "google/gemini-pro-1.5",
                 "meta-llama/llama-3.1-70b-instruct",

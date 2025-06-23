@@ -11,6 +11,7 @@ Environment Variables:
 - GOOGLE_ALLOWED_MODELS: Comma-separated list of allowed Gemini models
 - XAI_ALLOWED_MODELS: Comma-separated list of allowed X.AI GROK models
 - OPENROUTER_ALLOWED_MODELS: Comma-separated list of allowed OpenRouter models
+- DIAL_ALLOWED_MODELS: Comma-separated list of allowed DIAL models
 
 Example:
     OPENAI_ALLOWED_MODELS=o3-mini,o4-mini
@@ -44,6 +45,7 @@ class ModelRestrictionService:
         ProviderType.GOOGLE: "GOOGLE_ALLOWED_MODELS",
         ProviderType.XAI: "XAI_ALLOWED_MODELS",
         ProviderType.OPENROUTER: "OPENROUTER_ALLOWED_MODELS",
+        ProviderType.DIAL: "DIAL_ALLOWED_MODELS",
     }
 
     def __init__(self):
@@ -125,6 +127,10 @@ class ModelRestrictionService:
             return True
 
         allowed_set = self.restrictions[provider_type]
+
+        if len(allowed_set) == 0:
+            # Empty set - allowed
+            return True
 
         # Check both the resolved name and original name (if different)
         names_to_check = {model_name.lower()}

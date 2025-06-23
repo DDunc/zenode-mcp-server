@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Zenode MCP: Node.js Port of Zen MCP Server
 
 **Node.js/TypeScript implementation of the powerful Zen MCP Server**
@@ -125,21 +126,21 @@ Apache 2.0 License - see LICENSE file for details.
 
 ---
 
-# Zen MCP: One Context. Many Minds.
+# Zen MCP: Many Workflows. One Context.
 
-https://github.com/user-attachments/assets/8097e18e-b926-4d8b-ba14-a979e4c58bda
+[zen_web.webm](https://github.com/user-attachments/assets/851e3911-7f06-47c0-a4ab-a2601236697c)
 
 <div align="center">  
-  <b>🤖 Claude + [Gemini / OpenAI / Grok / OpenRouter / Ollama / Any Model] = Your Ultimate AI Development Team</b>
+  <b>🤖 Claude + [Gemini / OpenAI / Grok / OpenRouter / DIAL / Ollama / Any Model] = Your Ultimate AI Development Team</b>
 </div>
 
 <br/>
 
-The ultimate development partners for Claude - a Model Context Protocol server that gives Claude access to multiple AI models for enhanced code analysis, 
-problem-solving, and collaborative development.
+The ultimate development partners for Claude - a Model Context Protocol server that gives Claude access to multiple AI 
+models for enhanced code analysis, problem-solving, and collaborative development.
 
-**Features true AI orchestration with conversations that continue across tasks** - Give Claude a complex
-task and let it orchestrate between models automatically. Claude stays in control, performs the actual work, 
+**Features true AI orchestration with conversations that continue across workflows** - Give Claude a complex
+_workflow_ and let it orchestrate between models automatically. Claude stays in control, performs the actual work, 
 but gets perspectives from the best AI for each subtask. With tools like [`planner`](#3-planner---interactive-step-by-step-planning) for 
 breaking down complex projects, [`analyze`](#8-analyze---smart-file-analysis) for understanding codebases, 
 [`codereview`](#5-codereview---professional-code-review) for audits, [`refactor`](#9-refactor---intelligent-code-refactoring) for 
@@ -148,15 +149,20 @@ validating changes, Claude can switch between different tools _and_ models mid-c
 with context carrying forward seamlessly.
 
 **Example Workflow - Claude Code:**
-1. Performs its own reasoning
-2. Uses Gemini Pro to deeply [`analyze`](#8-analyze---smart-file-analysis) the code in question for a second opinion
-3. Switches to O3 to continue [`chatting`](#1-chat---general-development-chat--collaborative-thinking) about its findings 
-4. Uses Flash to evaluate formatting suggestions from O3
-5. Performs the actual work after taking in feedback from all three
-6. Returns to Pro for a [`precommit`](#6-precommit---pre-commit-validation) review
+1. `Perform a codereview using gemini pro and o3 and use planner to generate a detailed plan, implement the fixes and do a final precommit check by continuing from the previous codereview`
+2. This triggers a [`codereview`](#5-codereview---professional-code-review) workflow where Claude walks the code, looking for all kinds of issues
+3. After multiple passes, collects relevant code and makes note of issues along the way
+4. Maintains a `confidence` level between `exploring`, `low`, `medium`, `high` and `certain` to track how confidently it's been able to find and identify issues
+5. Generates a detailed list of critical -> low issues
+6. Shares the relevant files, findings, etc with **Gemini Pro** to perform a deep dive for a second [`codereview`](#5-codereview---professional-code-review)
+7. Comes back with a response and next does the same with o3, adding to the prompt if a new discovery comes to light
+8. When done, Claude takes in all the feedback and combines a single list of all critical -> low issues, including good patterns in your code. The final list includes new findings or revisions in case Claude misunderstood or missed something crucial and one of the other models pointed this out
+9. It then uses the [`planner`](#3-planner---interactive-step-by-step-planning) workflow to break the work down into simpler steps if a major refactor is required
+10. Claude then performs the actual work of fixing highlighted issues
+11. When done, Claude returns to Gemini Pro for a [`precommit`](#6-precommit---pre-commit-validation) review
 
-All within a single conversation thread! Gemini Pro in step 6 _knows_ what was recommended by O3 in step 3! Taking that context
-and review into consideration to aid with its pre-commit review.
+All within a single conversation thread! Gemini Pro in step 11 _knows_ what was recommended by O3 in step 7! Taking that context
+and review into consideration to aid with its final pre-commit review.
 
 **Think of it as Claude Code _for_ Claude Code.** This MCP isn't magic. It's just **super-glue**.
 
@@ -187,7 +193,8 @@ Because these AI models [clearly aren't when they get chatty →](docs/ai_banter
   - [`refactor`](#9-refactor---intelligent-code-refactoring) - Code refactoring with decomposition focus
   - [`tracer`](#10-tracer---static-code-analysis-prompt-generator) - Call-flow mapping and dependency tracing
   - [`testgen`](#11-testgen---comprehensive-test-generation) - Test generation with edge cases
-  - [`your custom tool`](#add-your-own-tools) - Create custom tools for specialized workflows
+  - [`secaudit`](#12-secaudit---comprehensive-security-audit) - Security audit with OWASP analysis
+  - [`docgen`](#13-docgen---comprehensive-documentation-generation) - Documentation generation with complexity analysis
 
 - **Advanced Usage**
   - [Advanced Features](#advanced-features) - AI-to-AI conversations, large prompts, web search
@@ -200,6 +207,7 @@ Because these AI models [clearly aren't when they get chatty →](docs/ai_banter
 ## Why This Server?
 
 Claude is brilliant, but sometimes you need:
+- **Guided workflows** - Developer-centric processes that enforce systematic investigation, preventing rushed analysis by ensuring Claude examines code thoroughly at each phase ([`debug`](#7-debug---expert-debugging-assistant), [`precommit`](#6-precommit---pre-commit-validation), [`refactor`](#9-refactor---intelligent-code-refactoring), [`analyze`](#8-analyze---smart-file-analysis), [`codereview`](#5-codereview---professional-code-review))
 - **Multiple AI perspectives** - Let Claude orchestrate between different models to get the best analysis
 - **Automatic model selection** - Claude picks the right model for each task (or you can specify)
 - **A senior developer partner** to validate and extend ideas ([`chat`](#1-chat---general-development-chat--collaborative-thinking))
@@ -265,6 +273,7 @@ The final implementation resulted in a 26% improvement in JSON parsing performan
 - **Gemini**: Visit [Google AI Studio](https://makersuite.google.com/app/apikey) and generate an API key. For best results with Gemini 2.5 Pro, use a paid API key as the free tier has limited access to the latest models.
 - **OpenAI**: Visit [OpenAI Platform](https://platform.openai.com/api-keys) to get an API key for O3 model access.
 - **X.AI**: Visit [X.AI Console](https://console.x.ai/) to get an API key for GROK model access.
+- **DIAL**: Visit [DIAL Platform](https://dialx.ai/) to get an API key for accessing multiple models through their unified API. DIAL is an open-source AI orchestration platform that provides vendor-agnostic access to models from major providers, open-source community, and self-hosted deployments. [API Documentation](https://dialx.ai/dial_api)
 
 **Option C: Custom API Endpoints (Local models like Ollama, vLLM)**
 [Please see the setup guide](docs/custom_models.md#option-2-custom-api-setup-ollama-vllm-etc). With a custom API you can use:
@@ -274,7 +283,7 @@ The final implementation resulted in a 26% improvement in JSON parsing performan
 - **Text Generation WebUI**: Popular local interface for running models
 - **Any OpenAI-compatible API**: Custom endpoints for your own infrastructure
 
-> **Note:** Using all three options may create ambiguity about which provider / model to use if there is an overlap. 
+> **Note:** Using multiple provider options may create ambiguity about which provider / model to use if there is an overlap. 
 > If all APIs are configured, native APIs will take priority when there is a clash in model name, such as for `gemini` and `o3`.
 > Configure your model aliases and give them unique names in [`conf/custom_models.json`](conf/custom_models.json)
 
@@ -312,6 +321,12 @@ nano .env
 # GEMINI_API_KEY=your-gemini-api-key-here  # For Gemini models
 # OPENAI_API_KEY=your-openai-api-key-here  # For O3 model
 # OPENROUTER_API_KEY=your-openrouter-key  # For OpenRouter (see docs/custom_models.md)
+# DIAL_API_KEY=your-dial-api-key-here      # For DIAL platform
+
+# For DIAL (optional configuration):
+# DIAL_API_HOST=https://core.dialx.ai      # Default DIAL host (optional)
+# DIAL_API_VERSION=2024-12-01-preview      # API version (optional)
+# DIAL_ALLOWED_MODELS=o3,gemini-2.5-pro    # Restrict to specific models (optional)
 
 # For local models (Ollama, vLLM, etc.):
 # CUSTOM_API_URL=http://localhost:11434/v1  # Ollama example
@@ -349,6 +364,13 @@ Just ask Claude naturally:
 
 ## Available Tools
 
+These aren't just tools—they're how you get Claude to think like a real developer. Instead of rushing to reply with 
+surface-level takes or shallow-insight, these workflows make Claude pause, dig into your code, and reason through 
+problems step by step. 
+
+It's the difference between a rushed guess and a focused second pair of eyes that actually understands your code. Try them 
+and feel the difference.
+
 **Quick Tool Selection Guide:**
 - **Need a thinking partner?** → `chat` (brainstorm ideas, get second opinions, validate approaches)
 - **Need deeper thinking?** → `thinkdeep` (extends analysis, finds edge cases)
@@ -361,6 +383,8 @@ Just ask Claude naturally:
 - **Code needs refactoring?** → `refactor` (intelligent refactoring with decomposition focus)
 - **Need call-flow analysis?** → `tracer` (generates prompts for execution tracing and dependency mapping)
 - **Need comprehensive tests?** → `testgen` (generates test suites with edge cases)
+- **Security concerns?** → `secaudit` (OWASP analysis, compliance evaluation, vulnerability assessment)
+- **Code needs documentation?** → `docgen` (generates comprehensive documentation with complexity analysis)
 - **Which models are available?** → `listmodels` (shows all configured providers and models)
 - **Server info?** → `version` (version and configuration details)
 
@@ -387,8 +411,10 @@ Just ask Claude naturally:
 9. [`refactor`](docs/tools/refactor.md) - Code refactoring with decomposition focus
 10. [`tracer`](docs/tools/tracer.md) - Static code analysis prompt generator for call-flow mapping
 11. [`testgen`](docs/tools/testgen.md) - Comprehensive test generation with edge case coverage
-12. [`listmodels`](docs/tools/listmodels.md) - Display all available AI models organized by provider
-13. [`version`](docs/tools/version.md) - Get server version and configuration
+12. [`secaudit`](docs/tools/secaudit.md) - Comprehensive security audit with OWASP Top 10 analysis
+13. [`docgen`](docs/tools/docgen.md) - Comprehensive documentation generation with complexity analysis
+14. [`listmodels`](docs/tools/listmodels.md) - Display all available AI models organized by provider
+15. [`version`](docs/tools/version.md) - Get server version and configuration
 
 ### 1. `chat` - General Development Chat & Collaborative Thinking
 Your thinking partner for brainstorming, getting second opinions, and validating approaches. Perfect for technology comparisons, architecture discussions, and collaborative problem-solving.
@@ -440,18 +466,17 @@ migrate from REST to GraphQL for our API. I need a definitive answer.
 **[📖 Read More](docs/tools/consensus.md)** - Multi-model orchestration and decision analysis
 
 ### 5. `codereview` - Professional Code Review
-Comprehensive code analysis with prioritized feedback and severity levels. Supports security reviews, performance analysis, and coding standards enforcement.
+Comprehensive code analysis with prioritized feedback and severity levels. This workflow tool guides Claude through systematic investigation steps with forced pauses between each step to ensure thorough code examination, issue identification, and quality assessment before providing expert analysis.
 
 ```
 Perform a codereview with gemini pro especially the auth.py as I feel some of the code is bypassing security checks 
 and there may be more potential vulnerabilities. Find and share related code."
 ```
 
-**[📖 Read More](docs/tools/codereview.md)** - Professional review capabilities and parallel analysis
+**[📖 Read More](docs/tools/codereview.md)** - Professional review workflow with step-by-step analysis
 
 ### 6. `precommit` - Pre-Commit Validation
-Comprehensive review of staged/unstaged git changes across multiple repositories. Validates changes against requirements 
-and detects potential regressions.
+Comprehensive review of staged/unstaged git changes across multiple repositories. This workflow tool guides Claude through systematic investigation of git changes, repository status, and file modifications across multiple steps before providing expert validation to ensure changes meet requirements and prevent regressions.
 
 ```
 Perform a thorough precommit with o3, we want to only highlight critical issues, no blockers, no regressions. I need
@@ -492,41 +517,48 @@ issue, ran `precommit` with o3 again and got:
 
  **RECOMMENDATION: PROCEED WITH COMMIT**
 
-Nice!
+Nice! This is just one instance - take a look at [another example here](docs/tools/precommit.md).
 
 **[📖 Read More](docs/tools/precommit.md)** - Multi-repository validation and change analysis
 
 ### 7. `debug` - Expert Debugging Assistant
-Systematic investigation-guided debugging that walks Claude through step-by-step root cause analysis. Claude performs 
-methodical code examination, evidence collection, and hypothesis formation before receiving expert analysis from the
-selected AI model. When Claude's confidence reaches **100% certainty** during the investigative workflow, expert analysis 
-via another model is skipped to save on tokens and cost, and Claude proceeds directly to fixing the issue.
+Systematic investigation-guided debugging that walks Claude through step-by-step root cause analysis. This workflow tool enforces a structured investigation process where Claude performs methodical code examination, evidence collection, and hypothesis formation across multiple steps before receiving expert analysis from the selected AI model. When Claude's confidence reaches **100% certainty** during the investigative workflow, expert analysis via another model is skipped to save on tokens and cost, and Claude proceeds directly to fixing the issue.
 
 ```
-See logs under /Users/me/project/diagnostics.log and related code under the sync folder. Logs show that sync
-works but sometimes it gets stuck and there are no errors displayed to the user. Using zen's debug tool with gemini pro, find out
-why this is happening and what the root cause is and its fix 
+See logs under /Users/me/project/diagnostics.log and related code under the sync folder. 
+Logs show that sync works but sometimes it gets stuck and there are no errors displayed to 
+the user. Using zen's debug tool with gemini pro, find out why this is happening and what the root 
+cause is and its fix 
 ```
 
-**[📖 Read More](docs/tools/debug.md)** - Step-by-step investigation methodology and expert analysis
+You can also add `do not use another model` to make Claude perform the entire workflow on its own. This is recommended
+for most debugging workflows, as Claude is usually able to confidently find the root cause by the time the workflow ends.
+
+When in doubt, you can always follow up with a new prompt and ask Claude to share its findings with another model:
+
+```text
+Use continuation with thinkdeep, share details with o4-mini to find out what the best fix is for this
+```
+
+**[📖 Read More](docs/tools/debug.md)** - Step-by-step investigation methodology with workflow enforcement
 
 ### 8. `analyze` - Smart File Analysis
-General-purpose code understanding and exploration. Supports architecture analysis, pattern detection, and comprehensive codebase exploration.
+General-purpose code understanding and exploration. This workflow tool guides Claude through systematic investigation of code structure, patterns, and architectural decisions across multiple steps, gathering comprehensive insights before providing expert analysis for architecture assessment, pattern detection, and strategic improvement recommendations.
 
 ```
 Use gemini to analyze main.py to understand how it works
 ```
 
-**[📖 Read More](docs/tools/analyze.md)** - Code analysis types and exploration capabilities
+**[📖 Read More](docs/tools/analyze.md)** - Comprehensive analysis workflow with step-by-step investigation
 
 ### 9. `refactor` - Intelligent Code Refactoring
-Comprehensive refactoring analysis with top-down decomposition strategy. Prioritizes structural improvements and provides precise implementation guidance.
+Comprehensive refactoring analysis with top-down decomposition strategy. This workflow tool enforces systematic investigation of code smells, decomposition opportunities, and modernization possibilities across multiple steps, ensuring thorough analysis before providing expert refactoring recommendations with precise implementation guidance.
 
 ```
 Use gemini pro to decompose my_crazy_big_class.m into smaller extensions
 ```
 
-**[📖 Read More](docs/tools/refactor.md)** - Refactoring strategy and progressive analysis approach
+**[📖 Read More](docs/tools/refactor.md)** - Workflow-driven refactoring with progressive analysis
 
 ### 10. `tracer` - Static Code Analysis Prompt Generator
 Creates detailed analysis prompts for call-flow mapping and dependency tracing. Generates structured analysis requests for precision execution flow or dependency mapping.
@@ -538,15 +570,37 @@ Use zen tracer to analyze how UserAuthManager.authenticate is used and why
 **[📖 Read More](docs/tools/tracer.md)** - Prompt generation and analysis modes
 
 ### 11. `testgen` - Comprehensive Test Generation
-Generates thorough test suites with edge case coverage based on existing code and test framework. Uses multi-agent workflow for realistic failure mode analysis.
+Generates thorough test suites with edge case coverage based on existing code and test framework. This workflow tool guides Claude through systematic investigation of code functionality, critical paths, edge cases, and integration points across multiple steps before generating comprehensive tests with realistic failure mode analysis.
 
 ```
 Use zen to generate tests for User.login() method
 ```
 
-**[📖 Read More](docs/tools/testgen.md)** - Test generation strategy and framework support
+**[📖 Read More](docs/tools/testgen.md)** - Workflow-based test generation with comprehensive coverage
 
-### 12. `listmodels` - List Available Models
+### 12. `secaudit` - Comprehensive Security Audit
+Systematic OWASP-based security assessment with compliance evaluation. This workflow tool guides Claude through methodical security investigation steps with forced pauses between each step to ensure thorough vulnerability assessment, security pattern analysis, and compliance verification before providing expert analysis.
+
+```
+Perform a secaudit with o3 on this e-commerce web application focusing on payment processing security and PCI DSS compliance
+```
+
+**[📖 Read More](docs/tools/secaudit.md)** - OWASP Top 10 analysis with compliance framework support
+
+### 13. `docgen` - Comprehensive Documentation Generation
+Generates thorough documentation with complexity analysis and gotcha identification. This workflow tool guides Claude through systematic investigation of code structure, function complexity, and documentation needs across multiple steps before generating comprehensive documentation that includes algorithmic complexity, call flow information, and unexpected behaviors that developers should know about.
+
+```
+# Includes complexity Big-O notiation, documents dependencies / code-flow, fixes existing stale docs 
+Use docgen to documentation the UserManager class
+
+# Includes complexity Big-O notiation, documents dependencies / code-flow
+Use docgen to add complexity analysis to all the new swift functions I added but don't update existing code
+```
+
+**[📖 Read More](docs/tools/docgen.md)** - Workflow-based documentation generation with gotcha detection
+
+### 14. `listmodels` - List Available Models
 Display all available AI models organized by provider, showing capabilities, context windows, and configuration status.
 
 ```
@@ -555,7 +609,7 @@ Use zen to list available models
 
 **[📖 Read More](docs/tools/listmodels.md)** - Model capabilities and configuration details
 
-### 13. `version` - Server Information
+### 15. `version` - Server Information
 Get server version, configuration details, and system status for debugging and troubleshooting.
 
 ```
@@ -578,6 +632,7 @@ Zen supports powerful structured prompts in Claude Code for quick access to tool
 - `/zen:codereview review for security module ABC` - Use codereview tool with auto-selected model
 - `/zen:debug table view is not scrolling properly, very jittery, I suspect the code is in my_controller.m` - Use debug tool with auto-selected model
 - `/zen:analyze examine these files and tell me what if I'm using the CoreAudio framework properly` - Use analyze tool with auto-selected model
+- `/zen:docgen generate comprehensive documentation for the UserManager class with complexity analysis` - Use docgen tool with auto-selected model
 
 #### Continuation Prompts
 - `/zen:chat continue and ask gemini pro if framework B is better` - Continue previous conversation using chat tool
@@ -588,27 +643,16 @@ Zen supports powerful structured prompts in Claude Code for quick access to tool
 - `/zen:consensus debate whether we should migrate to GraphQL for our API`
 - `/zen:precommit confirm these changes match our requirements in COOL_FEATURE.md`
 - `/zen:testgen write me tests for class ABC`
+- `/zen:docgen document the payment processing module with gotchas and complexity analysis`
 - `/zen:refactor propose a decomposition strategy, make a plan and save it in FIXES.md`
 
 #### Syntax Format
 The prompt format is: `/zen:[tool] [your_message]`
 
-- `[tool]` - Any available tool name (chat, thinkdeep, planner, consensus, codereview, debug, analyze, etc.)
+- `[tool]` - Any available tool name (chat, thinkdeep, planner, consensus, codereview, debug, analyze, docgen, etc.)
 - `[your_message]` - Your request, question, or instructions for the tool
 
 **Note:** All prompts will show as "(MCP) [tool]" in Claude Code to indicate they're provided by the MCP server.
-
-### Add Your Own Tools
-
-**Want to create custom tools for your specific workflows?** 
-
-The Zen MCP Server is designed to be extensible - you can easily add your own specialized
-tools for domain-specific tasks, custom analysis workflows, or integration with your favorite 
-services.
-
-**[See Complete Tool Development Guide](docs/adding_tools.md)** - Step-by-step instructions for creating, testing, and integrating new tools
-
-Your custom tools get the same benefits as built-in tools: multi-model support, conversation threading, token management, and automatic model selection.
 
 ## Advanced Features
 
@@ -628,10 +672,11 @@ Configure the Zen MCP Server through environment variables in your `.env` file. 
 DEFAULT_MODEL=auto
 GEMINI_API_KEY=your-gemini-key
 OPENAI_API_KEY=your-openai-key
+DIAL_API_KEY=your-dial-key  # Optional: Access to multiple models via DIAL
 ```
 
 **Key Configuration Options:**
-- **API Keys**: Native APIs (Gemini, OpenAI, X.AI), OpenRouter, or Custom endpoints (Ollama, vLLM)
+- **API Keys**: Native APIs (Gemini, OpenAI, X.AI), OpenRouter, DIAL, or Custom endpoints (Ollama, vLLM)
 - **Model Selection**: Auto mode or specific model defaults
 - **Usage Restrictions**: Control which models can be used for cost control
 - **Conversation Settings**: Timeout, turn limits, memory configuration
@@ -649,7 +694,6 @@ For information on running tests, see the [Testing Guide](docs/testing.md).
 We welcome contributions! Please see our comprehensive guides:
 - [Contributing Guide](docs/contributions.md) - Code standards, PR process, and requirements
 - [Adding a New Provider](docs/adding_providers.md) - Step-by-step guide for adding AI providers
-- [Adding a New Tool](docs/adding_tools.md) - Step-by-step guide for creating new tools
 
 ## License
 
@@ -658,7 +702,11 @@ Apache 2.0 License - see LICENSE file for details.
 ## Acknowledgments
 
 Built with the power of **Multi-Model AI** collaboration 🤝
+- **A**ctual **I**ntelligence by real Humans
 - [MCP (Model Context Protocol)](https://modelcontextprotocol.com) by Anthropic
 - [Claude Code](https://claude.ai/code) - Your AI coding assistant & orchestrator
 - [Gemini 2.5 Pro & 2.0 Flash](https://ai.google.dev/) - Extended thinking & fast analysis
 - [OpenAI O3](https://openai.com/) - Strong reasoning & general intelligence
+### Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=BeehiveInnovations/zen-mcp-server&type=Date)](https://www.star-history.com/#BeehiveInnovations/zen-mcp-server&Date)

@@ -10,9 +10,9 @@ from unittest.mock import patch
 
 from mcp.types import TextContent
 
-from tools.base import BaseTool
 from tools.chat import ChatTool
 from tools.planner import PlannerTool
+from tools.shared.base_tool import BaseTool
 
 
 class TestAutoModelPlannerFix:
@@ -46,7 +46,7 @@ class TestAutoModelPlannerFix:
                 return "Mock prompt"
 
             def get_request_model(self):
-                from tools.base import ToolRequest
+                from tools.shared.base_models import ToolRequest
 
                 return ToolRequest
 
@@ -100,7 +100,7 @@ class TestAutoModelPlannerFix:
         import json
 
         response_data = json.loads(result[0].text)
-        assert response_data["status"] == "planning_success"
+        assert response_data["status"] == "planner_complete"
         assert response_data["step_number"] == 1
 
     @patch("config.DEFAULT_MODEL", "auto")
@@ -172,7 +172,7 @@ class TestAutoModelPlannerFix:
         import json
 
         response1 = json.loads(result1[0].text)
-        assert response1["status"] == "planning_success"
+        assert response1["status"] == "pause_for_planner"
         assert response1["next_step_required"] is True
         assert "continuation_id" in response1
 
@@ -190,7 +190,7 @@ class TestAutoModelPlannerFix:
         assert len(result2) > 0
 
         response2 = json.loads(result2[0].text)
-        assert response2["status"] == "planning_success"
+        assert response2["status"] == "pause_for_planner"
         assert response2["step_number"] == 2
 
     def test_other_tools_still_require_models(self):

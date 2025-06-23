@@ -7,25 +7,31 @@ from .chat import ChatTool
 from .codereview import CodeReviewTool
 from .consensus import ConsensusTool
 from .debug import DebugIssueTool
+from .docgen import DocgenTool
 from .listmodels import ListModelsTool
 from .planner import PlannerTool
-from .precommit import Precommit
+from .precommit import PrecommitTool
 from .refactor import RefactorTool
-from .testgen import TestGenerationTool
+from .secaudit import SecauditTool
+from .testgen import TestGenTool
 from .thinkdeep import ThinkDeepTool
 from .tracer import TracerTool
+from .version import VersionTool
 
 __all__ = [
     "ThinkDeepTool",
     "CodeReviewTool",
     "DebugIssueTool",
+    "DocgenTool",
     "AnalyzeTool",
     "ChatTool",
     "ConsensusTool",
     "ListModelsTool",
     "PlannerTool",
-    "Precommit",
+    "PrecommitTool",
     "RefactorTool",
-    "TestGenerationTool",
+    "SecauditTool",
+    "TestGenTool",
     "TracerTool",
+    "VersionTool",
 ]

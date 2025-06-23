@@ -8,6 +8,16 @@ set -euo pipefail
 # Handles environment setup, dependency installation, and configuration.
 # ============================================================================
 
+# Initialize pyenv if available (do this early)
+if [[ -d "$HOME/.pyenv" ]]; then
+    export PYENV_ROOT="$HOME/.pyenv"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    if command -v pyenv &> /dev/null; then
+        eval "$(pyenv init --path)" 2>/dev/null || true
+        eval "$(pyenv init -)" 2>/dev/null || true
+    fi
+fi
+
 # ----------------------------------------------------------------------------
 # Constants and Configuration
 # ----------------------------------------------------------------------------
@@ -54,6 +64,14 @@ get_script_dir() {
 # Extract version from config.py
 get_version() {
     grep -E '^__version__ = ' config.py 2>/dev/null | sed 's/__version__ = "\(.*\)"/\1/' || echo "unknown"
+}
+
+# Clear Python cache files to prevent import issues
+clear_python_cache() {
+    print_info "Clearing Python cache files..."
+    find . -name "*.pyc" -delete 2>/dev/null || true
+    find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+    print_success "Python cache cleared"
 }
 
 # ----------------------------------------------------------------------------
@@ -175,6 +193,12 @@ cleanup_docker() {
 
 # Find suitable Python command
 find_python() {
+    # Pyenv should already be initialized at script start, but check if .python-version exists
+    if [[ -f ".python-version" ]] && command -v pyenv &> /dev/null; then
+        # Ensure pyenv respects the local .python-version
+        pyenv local &>/dev/null || true
+    fi
+    
     # Prefer Python 3.12 for best compatibility
     local python_cmds=("python3.12" "python3.13" "python3.11" "python3.10" "python3" "python" "py")
     
@@ -187,21 +211,326 @@ find_python() {
                 
                 # Check minimum version (3.10) for better library compatibility
                 if [[ $major_version -ge 10 ]]; then
-                    echo "$cmd"
-                    print_success "Found Python: $version"
-                    
-                    # Recommend Python 3.12
-                    if [[ $major_version -ne 12 ]]; then
-                        print_info "Note: Python 3.12 is recommended for best compatibility."
+                    # Verify the command actually exists (important for pyenv)
+                    if command -v "$cmd" &> /dev/null; then
+                        echo "$cmd"
+                        print_success "Found Python: $version"
+                        
+                        # Recommend Python 3.12
+                        if [[ $major_version -ne 12 ]]; then
+                            print_info "Note: Python 3.12 is recommended for best compatibility."
+                        fi
+                        
+                        return 0
                     fi
-                    
-                    return 0
                 fi
             fi
         fi
     done
     
-    print_error "Python 3.10+ not found. Please install Python 3.10 or newer (3.12 recommended)."
+    # No suitable Python found - check if we can use pyenv
+    local os_type=$(detect_os)
+    
+    # Check for pyenv on Unix-like systems (macOS/Linux)
+    if [[ "$os_type" == "macos" || "$os_type" == "linux" || "$os_type" == "wsl" ]]; then
+        if command -v pyenv &> /dev/null; then
+            # pyenv exists, check if Python 3.12 is installed
+            if ! pyenv versions 2>/dev/null | grep -E "3\.(1[2-9]|[2-9][0-9])" >/dev/null; then
+                echo ""
+                echo "Python 3.10+ is required. Pyenv can install Python 3.12 locally for this project."
+                read -p "Install Python 3.12 using pyenv? (Y/n): " -n 1 -r
+                echo ""
+                if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                    if install_python_with_pyenv; then
+                        # Try finding Python again
+                        if python_cmd=$(find_python); then
+                            echo "$python_cmd"
+                            return 0
+                        fi
+                    fi
+                fi
+            else
+                # Python 3.12+ is installed in pyenv but may not be active
+                # Check if .python-version exists
+                if [[ ! -f ".python-version" ]] || ! grep -qE "3\.(1[2-9]|[2-9][0-9])" .python-version 2>/dev/null; then
+                    echo ""
+                    print_info "Python 3.12 is installed via pyenv but not set for this project."
+                    read -p "Set Python 3.12.0 for this project? (Y/n): " -n 1 -r
+                    echo ""
+                    if [[ ! $REPLY =~ ^[Nn]$ ]]; then
+                        # Find the first suitable Python version
+                        local py_version=$(pyenv versions --bare | grep -E "^3\.(1[2-9]|[2-9][0-9])" | head -1)
+                        if [[ -n "$py_version" ]]; then
+                            pyenv local "$py_version"
+                            print_success "Set Python $py_version for this project"
+                            # Re-initialize pyenv to pick up the change
+                            eval "$(pyenv init --path)" 2>/dev/null || true
+                            eval "$(pyenv init -)" 2>/dev/null || true
+                            # Try finding Python again
+                            if python_cmd=$(find_python); then
+                                echo "$python_cmd"
+                                return 0
+                            fi
+                        fi
+                    fi
+                fi
+            fi
+        else
+            # No pyenv installed - show instructions
+            echo "" >&2
+            print_error "Python 3.10+ not found. The 'mcp' package requires Python 3.10+."
+            echo "" >&2
+            
+            if [[ "$os_type" == "macos" ]]; then
+                echo "To install Python locally for this project:" >&2
+                echo "" >&2
+                echo "1. Install pyenv (manages Python versions per project):" >&2
+                echo "   brew install pyenv" >&2
+                echo "" >&2
+                echo "2. Add to ~/.zshrc:" >&2
+                echo '   export PYENV_ROOT="$HOME/.pyenv"' >&2
+                echo '   export PATH="$PYENV_ROOT/bin:$PATH"' >&2
+                echo '   eval "$(pyenv init -)"' >&2
+                echo "" >&2
+                echo "3. Restart terminal, then run:" >&2
+                echo "   pyenv install 3.12.0" >&2
+                echo "   cd $(pwd)" >&2
+                echo "   pyenv local 3.12.0" >&2
+                echo "   ./run-server.sh" >&2
+            else
+                # Linux/WSL
+                echo "To install Python locally for this project:" >&2
+                echo "" >&2
+                echo "1. Install pyenv:" >&2
+                echo "   curl https://pyenv.run | bash" >&2
+                echo "" >&2
+                echo "2. Add to ~/.bashrc:" >&2
+                echo '   export PYENV_ROOT="$HOME/.pyenv"' >&2
+                echo '   export PATH="$PYENV_ROOT/bin:$PATH"' >&2
+                echo '   eval "$(pyenv init -)"' >&2
+                echo "" >&2
+                echo "3. Restart terminal, then run:" >&2
+                echo "   pyenv install 3.12.0" >&2
+                echo "   cd $(pwd)" >&2
+                echo "   pyenv local 3.12.0" >&2
+                echo "   ./run-server.sh" >&2
+            fi
+        fi
+    else
+        # Other systems (shouldn't happen with bash script)
+        print_error "Python 3.10+ not found. Please install Python 3.10 or newer."
+    fi
+    
+    return 1
+}
+
+# Install Python with pyenv (when pyenv is already installed)
+install_python_with_pyenv() {
+    # Ensure pyenv is initialized
+    export PYENV_ROOT="${PYENV_ROOT:-$HOME/.pyenv}"
+    export PATH="$PYENV_ROOT/bin:$PATH"
+    eval "$(pyenv init -)" 2>/dev/null || true
+    
+    print_info "Installing Python 3.12 (this may take a few minutes)..."
+    if pyenv install -s 3.12.0; then
+        print_success "Python 3.12 installed"
+        
+        # Set local Python version for this project
+        pyenv local 3.12.0
+        print_success "Python 3.12 set for this project"
+        
+        # Show shell configuration instructions
+        echo ""
+        print_info "To make pyenv work in new terminals, add to your shell config:"
+        local shell_config="~/.zshrc"
+        if [[ "$SHELL" == *"bash"* ]]; then
+            shell_config="~/.bashrc"
+        fi
+        echo '  export PYENV_ROOT="$HOME/.pyenv"'
+        echo '  command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"'
+        echo '  eval "$(pyenv init -)"'
+        echo ""
+        
+        # Re-initialize pyenv to use the newly installed Python
+        eval "$(pyenv init --path)" 2>/dev/null || true
+        eval "$(pyenv init -)" 2>/dev/null || true
+        
+        return 0
+    else
+        print_error "Failed to install Python 3.12"
+        return 1
+    fi
+}
+
+# Detect Linux distribution
+detect_linux_distro() {
+    if [[ -f /etc/os-release ]]; then
+        . /etc/os-release
+        echo "${ID:-unknown}"
+    elif [[ -f /etc/debian_version ]]; then
+        echo "debian"
+    elif [[ -f /etc/redhat-release ]]; then
+        echo "rhel"
+    elif [[ -f /etc/arch-release ]]; then
+        echo "arch"
+    else
+        echo "unknown"
+    fi
+}
+
+# Get package manager and install command for the distro
+get_install_command() {
+    local distro="$1"
+    local python_version="${2:-}"
+    
+    # Extract major.minor version if provided
+    local version_suffix=""
+    if [[ -n "$python_version" ]] && [[ "$python_version" =~ ([0-9]+\.[0-9]+) ]]; then
+        version_suffix="${BASH_REMATCH[1]}"
+    fi
+    
+    case "$distro" in
+        ubuntu|debian|raspbian|pop|linuxmint|elementary)
+            if [[ -n "$version_suffix" ]]; then
+                # Try version-specific packages first, then fall back to generic
+                echo "sudo apt update && (sudo apt install -y python${version_suffix}-venv python${version_suffix}-dev || sudo apt install -y python3-venv python3-pip)"
+            else
+                echo "sudo apt update && sudo apt install -y python3-venv python3-pip"
+            fi
+            ;;
+        fedora)
+            echo "sudo dnf install -y python3-venv python3-pip"
+            ;;
+        rhel|centos|rocky|almalinux|oracle)
+            echo "sudo dnf install -y python3-venv python3-pip || sudo yum install -y python3-venv python3-pip"
+            ;;
+        arch|manjaro|endeavouros)
+            echo "sudo pacman -Syu --noconfirm python-pip python-virtualenv"
+            ;;
+        opensuse|suse)
+            echo "sudo zypper install -y python3-venv python3-pip"
+            ;;
+        alpine)
+            echo "sudo apk add --no-cache python3-dev py3-pip py3-virtualenv"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+# Check if we can use sudo
+can_use_sudo() {
+    # Check if sudo exists and user can use it
+    if command -v sudo &> /dev/null; then
+        # Test sudo with a harmless command
+        if sudo -n true 2>/dev/null; then
+            return 0
+        elif [[ -t 0 ]]; then
+            # Terminal is interactive, test if sudo works with password
+            if sudo true 2>/dev/null; then
+                return 0
+            fi
+        fi
+    fi
+    return 1
+}
+
+# Try to install system packages automatically
+try_install_system_packages() {
+    local python_cmd="${1:-python3}"
+    local os_type=$(detect_os)
+    
+    # Skip on macOS as it works fine
+    if [[ "$os_type" == "macos" ]]; then
+        return 1
+    fi
+    
+    # Only try on Linux systems
+    if [[ "$os_type" != "linux" && "$os_type" != "wsl" ]]; then
+        return 1
+    fi
+    
+    # Get Python version
+    local python_version=""
+    if command -v "$python_cmd" &> /dev/null; then
+        python_version=$($python_cmd --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "")
+    fi
+    
+    local distro=$(detect_linux_distro)
+    local install_cmd=$(get_install_command "$distro" "$python_version")
+    
+    if [[ -z "$install_cmd" ]]; then
+        return 1
+    fi
+    
+    print_info "Attempting to install required Python packages..."
+    
+    # Check if we can use sudo
+    if can_use_sudo; then
+        print_info "Installing system packages (this may ask for your password)..."
+        if eval "$install_cmd" >/dev/null 2>&1; then
+            print_success "System packages installed successfully"
+            return 0
+        else
+            print_warning "Failed to install system packages automatically"
+        fi
+    fi
+    
+    return 1
+}
+
+# Bootstrap pip in virtual environment
+bootstrap_pip() {
+    local venv_python="$1"
+    local python_cmd="$2"
+    
+    print_info "Bootstrapping pip in virtual environment..."
+    
+    # Try ensurepip first
+    if $venv_python -m ensurepip --default-pip 2>/dev/null; then
+        print_success "Successfully bootstrapped pip using ensurepip"
+        return 0
+    fi
+    
+    # Try to download get-pip.py
+    print_info "Downloading pip installer..."
+    local get_pip_url="https://bootstrap.pypa.io/get-pip.py"
+    local temp_pip=$(mktemp)
+    local download_success=false
+    
+    # Try curl first
+    if command -v curl &> /dev/null; then
+        if curl -sSL "$get_pip_url" -o "$temp_pip" 2>/dev/null; then
+            download_success=true
+        fi
+    fi
+    
+    # Try wget if curl failed
+    if [[ "$download_success" == false ]] && command -v wget &> /dev/null; then
+        if wget -qO "$temp_pip" "$get_pip_url" 2>/dev/null; then
+            download_success=true
+        fi
+    fi
+    
+    # Try python urllib as last resort
+    if [[ "$download_success" == false ]]; then
+        print_info "Using Python to download pip installer..."
+        if $python_cmd -c "import urllib.request; urllib.request.urlretrieve('$get_pip_url', '$temp_pip')" 2>/dev/null; then
+            download_success=true
+        fi
+    fi
+    
+    if [[ "$download_success" == true ]] && [[ -f "$temp_pip" ]] && [[ -s "$temp_pip" ]]; then
+        print_info "Installing pip..."
+        if $venv_python "$temp_pip" --no-warn-script-location >/dev/null 2>&1; then
+            rm -f "$temp_pip"
+            print_success "Successfully installed pip"
+            return 0
+        fi
+    fi
+    
+    rm -f "$temp_pip" 2>/dev/null
     return 1
 }
 
@@ -209,6 +538,7 @@ find_python() {
 setup_venv() {
     local python_cmd="$1"
     local venv_python=""
+    local venv_pip=""
     
     # Create venv if it doesn't exist
     if [[ ! -d "$VENV_PATH" ]]; then
@@ -219,68 +549,92 @@ setup_venv() {
         if venv_error=$($python_cmd -m venv "$VENV_PATH" 2>&1); then
             print_success "Created isolated environment"
         else
-            print_error "Failed to create virtual environment"
-            echo ""
-            echo "Error details:"
-            echo "$venv_error"
-            echo ""
-            
             # Check for common Linux issues and try fallbacks
             local os_type=$(detect_os)
             if [[ "$os_type" == "linux" || "$os_type" == "wsl" ]]; then
-                if echo "$venv_error" | grep -E -q "No module named venv|venv.*not found"; then
-                    print_warning "Python venv module not available, trying fallback methods..."
-                    
-                    # Try virtualenv as fallback
-                    if command -v virtualenv &> /dev/null; then
-                        print_info "Attempting to create environment with virtualenv..."
-                        local fallback_error
-                        if fallback_error=$(virtualenv -p "$python_cmd" "$VENV_PATH" 2>&1); then
-                            print_success "Created environment using virtualenv fallback"
-                            # Continue to path setup below instead of early return
+                if echo "$venv_error" | grep -E -q "No module named venv|venv.*not found|ensurepip is not|python3.*-venv"; then
+                    # Try to install system packages automatically first
+                    if try_install_system_packages "$python_cmd"; then
+                        print_info "Retrying virtual environment creation..."
+                        if venv_error=$($python_cmd -m venv "$VENV_PATH" 2>&1); then
+                            print_success "Created isolated environment"
                         else
-                            echo "virtualenv fallback failed: $fallback_error"
+                            # Continue to fallback methods below
+                            print_warning "Still unable to create venv, trying fallback methods..."
                         fi
                     fi
                     
-                    # Try python -m virtualenv if directory wasn't created
+                    # If venv still doesn't exist, try fallback methods
                     if [[ ! -d "$VENV_PATH" ]]; then
-                        local fallback_error
-                        if fallback_error=$($python_cmd -m virtualenv "$VENV_PATH" 2>&1); then
-                            print_success "Created environment using python -m virtualenv fallback"
-                            # Continue to path setup below instead of early return
-                        else
-                            echo "python -m virtualenv fallback failed: $fallback_error"
+                        # Try virtualenv as fallback
+                        if command -v virtualenv &> /dev/null; then
+                            print_info "Attempting to create environment with virtualenv..."
+                            if virtualenv -p "$python_cmd" "$VENV_PATH" &>/dev/null 2>&1; then
+                                print_success "Created environment using virtualenv fallback"
+                            fi
+                        fi
+                        
+                        # Try python -m virtualenv if directory wasn't created
+                        if [[ ! -d "$VENV_PATH" ]]; then
+                            if $python_cmd -m virtualenv "$VENV_PATH" &>/dev/null 2>&1; then
+                                print_success "Created environment using python -m virtualenv fallback"
+                            fi
+                        fi
+                        
+                        # Last resort: try to install virtualenv via pip and use it
+                        if [[ ! -d "$VENV_PATH" ]] && command -v pip3 &> /dev/null; then
+                            print_info "Installing virtualenv via pip..."
+                            if pip3 install --user virtualenv &>/dev/null 2>&1; then
+                                local user_bin="$HOME/.local/bin"
+                                if [[ -f "$user_bin/virtualenv" ]]; then
+                                    if "$user_bin/virtualenv" -p "$python_cmd" "$VENV_PATH" &>/dev/null 2>&1; then
+                                        print_success "Created environment using pip-installed virtualenv"
+                                    fi
+                                fi
+                            fi
                         fi
                     fi
                     
-                    # Check if any fallback succeeded
+                    # Check if any method succeeded
                     if [[ ! -d "$VENV_PATH" ]]; then
-                        print_error "All virtual environment creation methods failed!"
+                        print_error "Unable to create virtual environment"
                         echo ""
-                        echo "Please install the venv or virtualenv package:"
-                        echo "  Ubuntu/Debian: sudo apt install python3-venv python3-virtualenv"
-                        echo "  RHEL/CentOS:   sudo dnf install python3-venv python3-virtualenv"
-                        echo "  Fedora:        sudo dnf install python3-venv python3-virtualenv"
-                        echo "  Arch:          sudo pacman -S python-virtualenv"
+                        echo "Your system is missing Python development packages."
                         echo ""
-                        echo "Or install via pip:"
-                        echo "  $python_cmd -m pip install --user virtualenv"
+                        
+                        local distro=$(detect_linux_distro)
+                        local python_version=$($python_cmd --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "")
+                        local install_cmd=$(get_install_command "$distro" "$python_version")
+                        
+                        if [[ -n "$install_cmd" ]]; then
+                            echo "Please run this command to install them:"
+                            echo "  $install_cmd"
+                        else
+                            echo "Please install Python venv support for your system:"
+                            echo "  Ubuntu/Debian: sudo apt install python3-venv python3-pip"
+                            echo "  RHEL/CentOS:   sudo dnf install python3-venv python3-pip"
+                            echo "  Arch:          sudo pacman -S python-pip python-virtualenv"
+                        fi
                         echo ""
+                        echo "Then run this script again."
                         exit 1
                     fi
                 elif echo "$venv_error" | grep -q "Permission denied"; then
                     print_error "Permission denied creating virtual environment"
                     echo ""
-                    echo "Try running with different permissions or in a different directory:"
-                    echo "  mkdir -p ~/zen-mcp-temp && cd ~/zen-mcp-temp"
-                    echo "  git clone <repository-url> && cd zen-mcp-server && ./run-server.sh"
+                    echo "Try running in a different directory:"
+                    echo "  cd ~ && git clone <repository-url> && cd zen-mcp-server && ./run-server.sh"
                     echo ""
                     exit 1
                 else
+                    print_error "Failed to create virtual environment"
+                    echo "Error: $venv_error"
                     exit 1
                 fi
             else
+                # For non-Linux systems, show the error and exit
+                print_error "Failed to create virtual environment"
+                echo "Error: $venv_error"
                 exit 1
             fi
         fi
@@ -291,25 +645,89 @@ setup_venv() {
     case "$os_type" in
         windows)
             venv_python="$VENV_PATH/Scripts/python.exe"
+            venv_pip="$VENV_PATH/Scripts/pip.exe"
             ;;
         *)
             venv_python="$VENV_PATH/bin/python"
+            venv_pip="$VENV_PATH/bin/pip"
             ;;
     esac
     
-    # Always use venv Python
-    if [[ -f "$venv_python" ]]; then
-        if [[ -n "${VIRTUAL_ENV:-}" ]]; then
-            print_success "Using activated virtual environment"
-        fi
-        # Convert to absolute path for MCP registration
-        local abs_venv_python=$(cd "$(dirname "$venv_python")" && pwd)/$(basename "$venv_python")
-        echo "$abs_venv_python"
-        return 0
-    else
+    # Check if venv Python exists
+    if [[ ! -f "$venv_python" ]]; then
         print_error "Virtual environment Python not found"
         exit 1
     fi
+    
+    # Check if pip exists in the virtual environment
+    if [[ ! -f "$venv_pip" ]] && ! $venv_python -m pip --version &>/dev/null 2>&1; then
+        # On Linux, try to install system packages if pip is missing
+        local os_type=$(detect_os)
+        if [[ "$os_type" == "linux" || "$os_type" == "wsl" ]]; then
+            if try_install_system_packages "$python_cmd"; then
+                # Check if pip is now available after system package install
+                if $venv_python -m pip --version &>/dev/null 2>&1; then
+                    print_success "pip is now available"
+                else
+                    # Still need to bootstrap pip
+                    bootstrap_pip "$venv_python" "$python_cmd" || true
+                fi
+            else
+                # Try to bootstrap pip without system packages
+                bootstrap_pip "$venv_python" "$python_cmd" || true
+            fi
+        else
+            # For non-Linux systems, just try to bootstrap pip
+            bootstrap_pip "$venv_python" "$python_cmd" || true
+        fi
+        
+        # Final check after all attempts
+        if ! $venv_python -m pip --version &>/dev/null 2>&1; then
+            print_error "Failed to install pip in virtual environment"
+            echo ""
+            echo "Your Python installation appears to be incomplete."
+            echo ""
+            
+            local distro=$(detect_linux_distro)
+            local python_version=$($python_cmd --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "")
+            local install_cmd=$(get_install_command "$distro" "$python_version")
+            
+            if [[ -n "$install_cmd" ]]; then
+                echo "Please run this command to install Python packages:"
+                echo "  $install_cmd"
+            else
+                echo "Please install Python pip support for your system."
+            fi
+            echo ""
+            echo "Then delete the virtual environment and run this script again:"
+            echo "  rm -rf $VENV_PATH"
+            echo "  ./run-server.sh"
+            echo ""
+            exit 1
+        fi
+    fi
+    
+    # Verify pip is working
+    if ! $venv_python -m pip --version &>/dev/null 2>&1; then
+        print_error "pip is not working correctly in the virtual environment"
+        echo ""
+        echo "Try deleting the virtual environment and running again:"
+        echo "  rm -rf $VENV_PATH"
+        echo "  ./run-server.sh"
+        echo ""
+        exit 1
+    fi
+    
+    if [[ -n "${VIRTUAL_ENV:-}" ]]; then
+        print_success "Using activated virtual environment with pip"
+    else
+        print_success "Virtual environment ready with pip"
+    fi
+    
+    # Convert to absolute path for MCP registration
+    local abs_venv_python=$(cd "$(dirname "$venv_python")" && pwd)/$(basename "$venv_python")
+    echo "$abs_venv_python"
+    return 0
 }
 
 # Check if package is installed
@@ -324,8 +742,17 @@ install_dependencies() {
     local python_cmd="$1"
     local deps_needed=false
     
+    # First verify pip is available
+    if ! $python_cmd -m pip --version &>/dev/null 2>&1; then
+        print_error "pip is not available in the Python environment"
+        echo ""
+        echo "This indicates an incomplete Python installation."
+        echo "Please see the instructions above for installing the required packages."
+        return 1
+    fi
+    
     # Check required packages
-    local packages=("mcp" "google.generativeai" "openai" "pydantic")
+    local packages=("mcp" "google.generativeai" "openai" "pydantic" "dotenv")
     for package in "${packages[@]}"; do
         local import_name=${package%%.*}  # Get first part before dot
         if ! check_package "$python_cmd" "$import_name"; then
@@ -345,6 +772,7 @@ install_dependencies() {
     echo "  • MCP protocol library"
     echo "  • AI model connectors"
     echo "  • Data validation tools"
+    echo "  • Environment configuration"
     echo ""
     
     # Determine if we're in a venv
@@ -355,16 +783,69 @@ install_dependencies() {
         install_cmd="$python_cmd -m pip install -q --user -r requirements.txt"
     fi
     
-    # Install packages
+    # Install packages with better error handling
     echo -n "Downloading packages..."
-    if $install_cmd 2>&1 | grep -i error | grep -v warning; then
+    local install_output
+    local install_error
+    
+    # Capture both stdout and stderr
+    install_output=$($install_cmd 2>&1)
+    local exit_code=$?
+    
+    if [[ $exit_code -ne 0 ]]; then
         echo -e "\r${RED}✗ Setup failed${NC}                      "
         echo ""
-        echo "Try running manually:"
-        echo "  $python_cmd -m pip install mcp google-genai openai pydantic"
+        echo "Installation error:"
+        echo "$install_output" | head -20
+        echo ""
+        
+        # Check for common issues
+        if echo "$install_output" | grep -q "No module named pip"; then
+            print_error "pip module not found"
+            echo ""
+            echo "Your Python installation is incomplete. Please install pip:"
+            
+            local distro=$(detect_linux_distro)
+            local python_version=$($python_cmd --version 2>&1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "")
+            local install_cmd=$(get_install_command "$distro" "$python_version")
+            
+            if [[ -n "$install_cmd" ]]; then
+                echo ""
+                echo "For your system ($distro), run:"
+                echo "  $install_cmd"
+            else
+                echo ""
+                echo "  Ubuntu/Debian: sudo apt install python3-pip"
+                echo "  RHEL/CentOS:   sudo dnf install python3-pip"
+                echo "  Arch:          sudo pacman -S python-pip"
+            fi
+        elif echo "$install_output" | grep -q "Permission denied"; then
+            print_error "Permission denied during installation"
+            echo ""
+            echo "Try using a virtual environment or install with --user flag:"
+            echo "  $python_cmd -m pip install --user -r requirements.txt"
+        else
+            echo "Try running manually:"
+            echo "  $python_cmd -m pip install -r requirements.txt"
+            echo ""
+            echo "Or install individual packages:"
+            echo "  $python_cmd -m pip install mcp google-genai openai pydantic python-dotenv"
+        fi
         return 1
     else
         echo -e "\r${GREEN}✓ Setup complete!${NC}                    "
+        
+        # Verify critical imports work
+        if ! check_package "$python_cmd" "dotenv"; then
+            print_warning "python-dotenv not imported correctly, installing explicitly..."
+            if $python_cmd -m pip install python-dotenv &>/dev/null 2>&1; then
+                print_success "python-dotenv installed successfully"
+            else
+                print_error "Failed to install python-dotenv"
+                return 1
+            fi
+        fi
+        
         return 0
     fi
 }
@@ -402,6 +883,7 @@ setup_env_file() {
         "GEMINI_API_KEY:your_gemini_api_key_here"
         "OPENAI_API_KEY:your_openai_api_key_here"
         "XAI_API_KEY:your_xai_api_key_here"
+        "DIAL_API_KEY:your_dial_api_key_here"
         "OPENROUTER_API_KEY:your_openrouter_api_key_here"
     )
     
@@ -453,6 +935,7 @@ validate_api_keys() {
         "GEMINI_API_KEY:your_gemini_api_key_here"
         "OPENAI_API_KEY:your_openai_api_key_here"
         "XAI_API_KEY:your_xai_api_key_here"
+        "DIAL_API_KEY:your_dial_api_key_here"
         "OPENROUTER_API_KEY:your_openrouter_api_key_here"
     )
     
@@ -480,7 +963,10 @@ validate_api_keys() {
         echo "  GEMINI_API_KEY=your-actual-key" >&2
         echo "  OPENAI_API_KEY=your-actual-key" >&2
         echo "  XAI_API_KEY=your-actual-key" >&2
+        echo "  DIAL_API_KEY=your-actual-key" >&2
         echo "  OPENROUTER_API_KEY=your-actual-key" >&2
+        echo "" >&2
+        print_info "After adding your API keys, run ./run-server.sh again" >&2
         echo "" >&2
         return 1
     fi
@@ -780,12 +1266,14 @@ show_help() {
     echo "  -v, --version   Show version information"
     echo "  -f, --follow    Follow server logs in real-time"
     echo "  -c, --config    Show configuration instructions for Claude clients"
+    echo "  --clear-cache   Clear Python cache and exit (helpful for import issues)"
     echo ""
     echo "Examples:"
     echo "  $0              Setup and start the MCP server"
     echo "  $0 -f           Setup and follow logs"
     echo "  $0 -c           Show configuration instructions"
     echo "  $0 --version    Show version only"
+    echo "  $0 --clear-cache Clear Python cache (fixes import issues)"
     echo ""
     echo "For more information, visit:"
     echo "  https://github.com/BeehiveInnovations/zen-mcp-server"
@@ -844,6 +1332,14 @@ main() {
         -f|--follow)
             # Continue with normal setup then follow logs
             ;;
+        --clear-cache)
+            # Clear cache and exit
+            clear_python_cache
+            print_success "Cache cleared successfully"
+            echo ""
+            echo "You can now run './run-server.sh' normally"
+            exit 0
+            ;;
         "")
             # Normal setup without following logs
             ;;
@@ -873,9 +1369,15 @@ main() {
     # Step 1: Docker cleanup
     cleanup_docker
     
+    # Step 1.5: Clear Python cache to prevent import issues
+    clear_python_cache
+    
     # Step 2: Find Python
     local python_cmd
-    python_cmd=$(find_python) || exit 1
+    if ! python_cmd=$(find_python); then
+        # find_python already printed error messages, just exit
+        exit 1
+    fi
     
     # Step 3: Setup environment file
     setup_env_file || exit 1

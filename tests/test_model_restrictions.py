@@ -24,7 +24,7 @@ class TestModelRestrictionService:
             assert service.is_allowed(ProviderType.OPENAI, "o3-mini")
             assert service.is_allowed(ProviderType.GOOGLE, "gemini-2.5-pro")
             assert service.is_allowed(ProviderType.GOOGLE, "gemini-2.5-flash")
-            assert service.is_allowed(ProviderType.OPENROUTER, "anthropic/claude-3-opus")
+            assert service.is_allowed(ProviderType.OPENROUTER, "anthropic/claude-opus-4")
             assert service.is_allowed(ProviderType.OPENROUTER, "openai/o3")
 
             # Should have no restrictions
@@ -44,7 +44,7 @@ class TestModelRestrictionService:
 
             # Google and OpenRouter should have no restrictions
             assert service.is_allowed(ProviderType.GOOGLE, "gemini-2.5-pro")
-            assert service.is_allowed(ProviderType.OPENROUTER, "anthropic/claude-3-opus")
+            assert service.is_allowed(ProviderType.OPENROUTER, "anthropic/claude-opus-4")
 
     def test_load_multiple_models_restriction(self):
         """Test loading multiple allowed models."""
@@ -93,7 +93,7 @@ class TestModelRestrictionService:
         with patch.dict(os.environ, {"OPENAI_ALLOWED_MODELS": "o3-mini,o4-mini"}):
             service = ModelRestrictionService()
 
-            models = ["o3", "o3-mini", "o4-mini", "o4-mini-high"]
+            models = ["o3", "o3-mini", "o4-mini", "o3-pro"]
             filtered = service.filter_models(ProviderType.OPENAI, models)
 
             assert filtered == ["o3-mini", "o4-mini"]
@@ -159,7 +159,7 @@ class TestModelRestrictionService:
             # Should only allow specified OpenRouter models
             assert service.is_allowed(ProviderType.OPENROUTER, "opus")
             assert service.is_allowed(ProviderType.OPENROUTER, "sonnet")
-            assert service.is_allowed(ProviderType.OPENROUTER, "anthropic/claude-3-opus", "opus")  # With original name
+            assert service.is_allowed(ProviderType.OPENROUTER, "anthropic/claude-opus-4", "opus")  # With original name
             assert not service.is_allowed(ProviderType.OPENROUTER, "haiku")
             assert not service.is_allowed(ProviderType.OPENROUTER, "anthropic/claude-3-haiku")
             assert not service.is_allowed(ProviderType.OPENROUTER, "mistral-large")
@@ -573,7 +573,7 @@ class TestShorthandRestrictions:
 
         # Other models should not work
         assert not openai_provider.validate_model_name("o3")
-        assert not openai_provider.validate_model_name("o4-mini-high")
+        assert not openai_provider.validate_model_name("o3-pro")
 
     @patch.dict(
         os.environ,

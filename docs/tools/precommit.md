@@ -1,12 +1,31 @@
 # PreCommit Tool - Pre-Commit Validation
 
-**Comprehensive review of staged/unstaged git changes across multiple repositories**
+**Comprehensive review of staged/unstaged git changes across multiple repositories through workflow-driven investigation**
 
-The `precommit` tool provides thorough validation of git changes before committing, ensuring code quality, requirement compliance, and preventing regressions across multiple repositories.
+The `precommit` tool provides thorough validation of git changes before committing, ensuring code quality, requirement compliance, and preventing regressions across multiple repositories. This workflow tool guides Claude through systematic investigation of git changes, repository status, and file modifications across multiple steps before providing expert validation.
 
 ## Thinking Mode
 
 **Default is `medium` (8,192 tokens).** Use `high` or `max` for critical releases when thorough validation justifies the token cost.
+
+## How the Workflow Works
+
+The precommit tool implements a **structured workflow** for comprehensive change validation:
+
+**Investigation Phase (Claude-Led):**
+1. **Step 1**: Claude describes the validation plan and begins analyzing git status across repositories
+2. **Step 2+**: Claude examines changes, diffs, dependencies, and potential impacts
+3. **Throughout**: Claude tracks findings, relevant files, issues, and confidence levels
+4. **Completion**: Once investigation is thorough, Claude signals completion
+
+**Expert Validation Phase:**
+After Claude completes the investigation (unless confidence is **certain**):
+- Complete summary of all changes and their context
+- Potential issues and regressions identified
+- Requirement compliance assessment
+- Final recommendations for safe commit
+
+**Special Note**: If you want Claude to perform the entire pre-commit validation without calling another model, you can include "don't use any other model" in your prompt, and Claude will complete the full workflow independently.
 
 ## Model Recommendation
 
@@ -25,6 +44,57 @@ logic, everything should work as expected
 ```
 
 How beautiful is that? Claude used `precommit` twice and `codereview` once and actually found and fixed two critical errors before commit!
+
+### Real-world Example
+
+Here's an example where Claude was made to go through changes *it* was asked to make. Its recommendation 
+to **Publish all Changes** was made after a rigorous set of prompts where it examined the small set of changes 
+from different angles (performance, bugs, anti-patterns etc). After confirming that unit tests were 
+passing, it went ahead with an initial review with O3; came back clean - all good to go. O3 was happy, everything looked great.
+
+Then it shared the changes and relevant code with Gemini 2.5 Pro - the following is the outcome:
+
+```
+⏺ zen:precommit (MCP)(step: "FINAL VALIDATION COMPLETE. All changes have been thoroughly analyzed and are ready for
+                     commit. The modifications successfully fix 4 GitHub CI test failures with high-quality, defensive
+                     implementations that maintain architectural integrity and coding standards. No issues or regressions
+                      detected.", step_number: 4, total_steps: 4, next_step_required: false, findings: "COMMIT
+                     RECOMMENDATION: ✅ APPROVED\n\nSUMMARY OF CHANGES:\n✅ Fixed 4 GitHub CI test failures:\n   -
+                     test_openrouter_with_restrictions (Mock iteration issue)  \n   - test_execute_with_branching
+                     (Missing metadata)\n   - test_execute_with_revision (Missing metadata)\n   - test_metadata_preserved
+                      (Provider type AttributeError)\n\n✅ IMPLEMENTATION QUALITY VERIFIED:\n   - Defensive programming
+                     with proper type checking\n   - Error handling with meaningful fallbacks\n   - Backward
+                     compatibility maintained\n   - Coding standards followed (no hasattr/getattr in changes)\n   -
+                     Architectural patterns preserved\n\n✅ COMPREHENSIVE TESTING:\n   - All originally failing tests
+                     pass\n   - Affected functionality: 37/37 tests pass\n   - Provider systems: 16/16 tests pass  \n   -
+                      Module imports work correctly\n   - No regressions detected\n\n✅ CHANGE IMPACT ASSESSMENT:\n   -
+                     Minimal, targeted changes\n   - No security or performance concerns\n   - Maintains API
+                     compatibility\n   - Changes are well-documented with clear comments\n\nRECOMMENDATION: These changes
+                      are safe to commit and will resolve the GitHub CI failures without any negative impact.",
+  ⎿  {
+       "status": "calling_expert_analysis",
+       "step_number": 4,
+     … +169 lines (ctrl+r to expand)
+
+⏺ 🔍 Pre-Commit Validation Complete
+
+  Based on comprehensive analysis using both O3 and Gemini 2.5 Pro models, I can provide the following assessment:
+
+  ✅ APPROVED WITH CRITICAL FIX REQUIRED
+
+  The changes successfully fix all 4 GitHub CI test failures and are well-implemented with defensive programming
+  patterns. However, the expert analysis identified one critical issue that must be addressed before commit:
+
+  🚨 [HIGH PRIORITY] Critical Issue Found
+
+  Inconsistent Provider Handling in tools/base.py
+  - Location: tools/base.py line ~1833 in _create_continuation_offer_response method
+  - Problem: The defensive provider handling pattern was applied in 2 locations but missed a 3rd location
+  - Impact: Risk of AttributeError: 'str' object has no attribute 'get_provider_type' in continuation scenarios
+  - Fix Required: Apply the same defensive pattern to the missed location
+```
+
+A subtle but critical issue spotted by Gemini that both Claude + O3 missed. This is the power of running these workflows with Zen.
 
 ## Example Prompts
 
@@ -47,21 +117,34 @@ Use zen and perform a thorough precommit ensuring there aren't any new regressio
 
 ## Tool Parameters
 
+**Workflow Investigation Parameters (used during step-by-step process):**
+- `step`: Current investigation step description (required for each step)
+- `step_number`: Current step number in validation sequence (required)
+- `total_steps`: Estimated total investigation steps (adjustable)
+- `next_step_required`: Whether another investigation step is needed
+- `findings`: Discoveries and evidence collected in this step (required)
+- `files_checked`: All files examined during investigation
+- `relevant_files`: Files directly relevant to the changes
+- `relevant_context`: Methods/functions/classes affected by changes
+- `issues_found`: Issues identified with severity levels
+- `confidence`: Confidence level in validation completeness (exploring/low/medium/high/certain)
+- `backtrack_from_step`: Step number to backtrack from (for revisions)
+- `hypothesis`: Current assessment of change safety and completeness
+- `images`: Screenshots of requirements, design mockups for validation
+
+**Initial Configuration (used in step 1):**
 - `path`: Starting directory to search for repos (default: current directory, absolute path required)
 - `prompt`: The original user request description for the changes (required for context)
-- `model`: auto|pro|flash|o3|o3-mini|o4-mini|o4-mini-high|gpt4.1 (default: server default)
+- `model`: auto|pro|flash|o3|o3-mini|o4-mini|gpt4.1 (default: server default)
 - `compare_to`: Compare against a branch/tag instead of local changes (optional)
-- `review_type`: full|security|performance|quick (default: full)
 - `severity_filter`: critical|high|medium|low|all (default: all)
-- `max_depth`: How deep to search for nested repos (default: 5)
 - `include_staged`: Include staged changes in the review (default: true)
 - `include_unstaged`: Include uncommitted changes in the review (default: true)
-- `images`: Screenshots of requirements, design mockups, or error states for validation context
-- `files`: Optional files for additional context (not part of changes but provide context)
 - `focus_on`: Specific aspects to focus on
 - `temperature`: Temperature for response (default: 0.2)
 - `thinking_mode`: minimal|low|medium|high|max (default: medium, Gemini only)
 - `use_websearch`: Enable web search for best practices (default: true)
+- `use_assistant_model`: Whether to use expert validation phase (default: true, set to false to use Claude only)
 - `continuation_id`: Continue previous validation discussions
 
 ## Usage Examples

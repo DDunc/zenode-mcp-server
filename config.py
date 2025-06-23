@@ -14,9 +14,9 @@ import os
 # These values are used in server responses and for tracking releases
 # IMPORTANT: This is the single source of truth for version and author info
 # Semantic versioning: MAJOR.MINOR.PATCH
-__version__ = "5.2.4"
+__version__ = "5.7.0"
 # Last update date in ISO format
-__updated__ = "2025-06-19"
+__updated__ = "2025-06-23"
 # Primary maintainer
 __author__ = "Fahad Gilani"
 
@@ -30,51 +30,15 @@ DEFAULT_MODEL = os.getenv("DEFAULT_MODEL", "auto")
 # Auto mode detection - when DEFAULT_MODEL is "auto", Claude picks the model
 IS_AUTO_MODE = DEFAULT_MODEL.lower() == "auto"
 
-# Model capabilities descriptions for auto mode
-# These help Claude choose the best model for each task
+# Each provider (gemini.py, openai_provider.py, xai.py) defines its own SUPPORTED_MODELS
+# with detailed descriptions. Tools use ModelProviderRegistry.get_available_model_names()
+# to get models only from enabled providers (those with valid API keys).
 #
-# IMPORTANT: These are the built-in natively supported models:
-# - When GEMINI_API_KEY is set: Enables "flash", "pro" (and their full names)
-# - When OPENAI_API_KEY is set: Enables "o3", "o3mini", "o4-mini", "o4-mini-high"
-# - When both are set: All models below are available
-# - When neither is set but OpenRouter/Custom API is configured: These model
-#   aliases will automatically map to equivalent models via the proxy provider
-#
-# In auto mode (DEFAULT_MODEL=auto), Claude will see these descriptions and
-# intelligently select the best model for each task. The descriptions appear
-# in the tool schema to guide Claude's selection based on task requirements.
-MODEL_CAPABILITIES_DESC = {
-    # Gemini models - Available when GEMINI_API_KEY is configured
-    "flash": "Ultra-fast (1M context) - Quick analysis, simple queries, rapid iterations",
-    "pro": "Deep reasoning + thinking mode (1M context) - Complex problems, architecture, deep analysis",
-    # OpenAI models - Available when OPENAI_API_KEY is configured
-    "o3": "Strong reasoning (200K context) - Logical problems, code generation, systematic analysis",
-    "o3-mini": "Fast O3 variant (200K context) - Balanced performance/speed, moderate complexity",
-    "o3-pro": "Professional-grade reasoning (200K context) - EXTREMELY EXPENSIVE: Only for the most complex problems requiring universe-scale complexity analysis OR when the user explicitly asks for this model. Use sparingly for critical architectural decisions or exceptionally complex debugging that other models cannot handle.",
-    "o4-mini": "Latest reasoning model (200K context) - Optimized for shorter contexts, rapid reasoning",
-    "o4-mini-high": "Enhanced O4 mini (200K context) - Higher reasoning effort for complex tasks",
-    # X.AI GROK models - Available when XAI_API_KEY is configured
-    "grok": "GROK-3 (131K context) - Advanced reasoning model from X.AI, excellent for complex analysis",
-    "grok-3": "GROK-3 (131K context) - Advanced reasoning model from X.AI, excellent for complex analysis",
-    "grok-3-fast": "GROK-3 Fast (131K context) - Higher performance variant, faster processing but more expensive",
-    "grok3": "GROK-3 (131K context) - Advanced reasoning model from X.AI, excellent for complex analysis",
-    "grokfast": "GROK-3 Fast (131K context) - Higher performance variant, faster processing but more expensive",
-    # Full model names also supported (for explicit specification)
-    "gemini-2.5-flash": "Ultra-fast (1M context) - Quick analysis, simple queries, rapid iterations",
-    "gemini-2.5-pro": ("Deep reasoning + thinking mode (1M context) - Complex problems, architecture, deep analysis"),
-}
-
-# OpenRouter/Custom API Fallback Behavior:
-# When only OpenRouter or Custom API is configured (no native API keys), these
-# model aliases automatically map to equivalent models through the proxy:
-# - "flash" → "google/gemini-2.5-flash" (via OpenRouter)
-# - "pro" → "google/gemini-2.5-pro" (via OpenRouter)
-# - "o3" → "openai/o3" (via OpenRouter)
-# - "o3mini" → "openai/o3-mini" (via OpenRouter)
-# - "o4-mini" → "openai/o4-mini" (via OpenRouter)
-# - "o4-mini-high" → "openai/o4-mini-high" (via OpenRouter)
-#
-# This ensures the same model names work regardless of which provider is configured.
+# This architecture ensures:
+# - No namespace collisions (models only appear when their provider is enabled)
+# - API key-based filtering (prevents wrong models from being shown to Claude)
+# - Proper provider routing (models route to the correct API endpoint)
+# - Clean separation of concerns (providers own their model definitions)
 
 
 # Temperature defaults for different tool types
@@ -118,13 +82,16 @@ DEFAULT_CONSENSUS_MAX_INSTANCES_PER_COMBINATION = 2
 #     ↑                              ↑
 #     │                              │
 # MCP transport                Internal processing
-# (25K token limit)            (No MCP limit - can be 1M+ tokens)
+# (token limit from MAX_MCP_OUTPUT_TOKENS)    (No MCP limit - can be 1M+ tokens)
 #
 # MCP_PROMPT_SIZE_LIMIT: Maximum character size for USER INPUT crossing MCP transport
-# The MCP protocol has a combined request+response limit of ~25K tokens total.
+# The MCP protocol has a combined request+response limit controlled by MAX_MCP_OUTPUT_TOKENS.
 # To ensure adequate space for MCP Server → Claude CLI responses, we limit user input
-# to 50K characters (roughly ~10-12K tokens). Larger user prompts must be sent
-# as prompt.txt files to bypass MCP's transport constraints.
+# to roughly 60% of the total token budget converted to characters. Larger user prompts
+# must be sent as prompt.txt files to bypass MCP's transport constraints.
+#
+# Token to character conversion ratio: ~4 characters per token (average for code/text)
+# Default allocation: 60% of tokens for input, 40% for response
 #
 # What IS limited by this constant:
 # - request.prompt field content (user input from Claude CLI)
@@ -140,7 +107,34 @@ DEFAULT_CONSENSUS_MAX_INSTANCES_PER_COMBINATION = 2
 #
 # This ensures MCP transport stays within protocol limits while allowing internal
 # processing to use full model context windows (200K-1M+ tokens).
-MCP_PROMPT_SIZE_LIMIT = 50_000  # 50K characters (user input only)
+
+
+def _calculate_mcp_prompt_limit() -> int:
+    """
+    Calculate MCP prompt size limit based on MAX_MCP_OUTPUT_TOKENS environment variable.
+
+    Returns:
+        Maximum character count for user input prompts
+    """
+    # Check for Claude's MAX_MCP_OUTPUT_TOKENS environment variable
+    max_tokens_str = os.getenv("MAX_MCP_OUTPUT_TOKENS")
+
+    if max_tokens_str:
+        try:
+            max_tokens = int(max_tokens_str)
+            # Allocate 60% of tokens for input, convert to characters (~4 chars per token)
+            input_token_budget = int(max_tokens * 0.6)
+            character_limit = input_token_budget * 4
+            return character_limit
+        except (ValueError, TypeError):
+            # Fall back to default if MAX_MCP_OUTPUT_TOKENS is not a valid integer
+            pass
+
+    # Default fallback: 60,000 characters (equivalent to ~15k tokens input of 25k total)
+    return 60_000
+
+
+MCP_PROMPT_SIZE_LIMIT = _calculate_mcp_prompt_limit()
 
 # Threading configuration
 # Simple in-memory conversation threading for stateless MCP environment

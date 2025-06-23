@@ -6,8 +6,8 @@ import tempfile
 
 import pytest
 
-from providers.base import ProviderType
-from providers.openrouter_registry import OpenRouterModelConfig, OpenRouterModelRegistry
+from providers.base import ModelCapabilities, ProviderType
+from providers.openrouter_registry import OpenRouterModelRegistry
 
 
 class TestOpenRouterModelRegistry:
@@ -24,7 +24,16 @@ class TestOpenRouterModelRegistry:
     def test_custom_config_path(self):
         """Test registry with custom config path."""
         # Create temporary config
-        config_data = {"models": [{"model_name": "test/model-1", "aliases": ["test1", "t1"], "context_window": 4096}]}
+        config_data = {
+            "models": [
+                {
+                    "model_name": "test/model-1",
+                    "aliases": ["test1", "t1"],
+                    "context_window": 4096,
+                    "max_output_tokens": 2048,
+                }
+            ]
+        }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(config_data, f)
@@ -42,7 +51,11 @@ class TestOpenRouterModelRegistry:
     def test_environment_variable_override(self):
         """Test OPENROUTER_MODELS_PATH environment variable."""
         # Create custom config
-        config_data = {"models": [{"model_name": "env/model", "aliases": ["envtest"], "context_window": 8192}]}
+        config_data = {
+            "models": [
+                {"model_name": "env/model", "aliases": ["envtest"], "context_window": 8192, "max_output_tokens": 4096}
+            ]
+        }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(config_data, f)
@@ -74,12 +87,12 @@ class TestOpenRouterModelRegistry:
 
         # Test various aliases
         test_cases = [
-            ("opus", "anthropic/claude-3-opus"),
-            ("OPUS", "anthropic/claude-3-opus"),  # Case insensitive
-            ("claude", "anthropic/claude-3-sonnet"),
+            ("opus", "anthropic/claude-opus-4"),
+            ("OPUS", "anthropic/claude-opus-4"),  # Case insensitive
+            ("claude", "anthropic/claude-sonnet-4"),
             ("o3", "openai/o3"),
             ("deepseek", "deepseek/deepseek-r1-0528"),
-            ("mistral", "mistral/mistral-large"),
+            ("mistral", "mistralai/mistral-large-2411"),
         ]
 
         for alias, expected_model in test_cases:
@@ -92,9 +105,9 @@ class TestOpenRouterModelRegistry:
         registry = OpenRouterModelRegistry()
 
         # Should be able to look up by full model name
-        config = registry.resolve("anthropic/claude-3-opus")
+        config = registry.resolve("anthropic/claude-opus-4")
         assert config is not None
-        assert config.model_name == "anthropic/claude-3-opus"
+        assert config.model_name == "anthropic/claude-opus-4"
 
         config = registry.resolve("openai/o3")
         assert config is not None
@@ -110,28 +123,29 @@ class TestOpenRouterModelRegistry:
         assert registry.resolve("non-existent") is None
 
     def test_model_capabilities_conversion(self):
-        """Test conversion to ModelCapabilities."""
+        """Test that registry returns ModelCapabilities directly."""
         registry = OpenRouterModelRegistry()
 
         config = registry.resolve("opus")
         assert config is not None
 
-        caps = config.to_capabilities()
-        assert caps.provider == ProviderType.OPENROUTER
-        assert caps.model_name == "anthropic/claude-3-opus"
-        assert caps.friendly_name == "OpenRouter"
-        assert caps.context_window == 200000
-        assert not caps.supports_extended_thinking
+        # Registry now returns ModelCapabilities objects directly
+        assert config.provider == ProviderType.OPENROUTER
+        assert config.model_name == "anthropic/claude-opus-4"
+        assert config.friendly_name == "OpenRouter (anthropic/claude-opus-4)"
+        assert config.context_window == 200000
+        assert not config.supports_extended_thinking
 
     def test_duplicate_alias_detection(self):
         """Test that duplicate aliases are detected."""
         config_data = {
             "models": [
-                {"model_name": "test/model-1", "aliases": ["dupe"], "context_window": 4096},
+                {"model_name": "test/model-1", "aliases": ["dupe"], "context_window": 4096, "max_output_tokens": 2048},
                 {
                     "model_name": "test/model-2",
                     "aliases": ["DUPE"],  # Same alias, different case
                     "context_window": 8192,
+                    "max_output_tokens": 2048,
                 },
             ]
         }
@@ -199,19 +213,23 @@ class TestOpenRouterModelRegistry:
 
     def test_model_with_all_capabilities(self):
         """Test model with all capability flags."""
-        config = OpenRouterModelConfig(
+        from providers.base import create_temperature_constraint
+
+        caps = ModelCapabilities(
+            provider=ProviderType.OPENROUTER,
             model_name="test/full-featured",
+            friendly_name="OpenRouter (test/full-featured)",
             aliases=["full"],
             context_window=128000,
+            max_output_tokens=8192,
             supports_extended_thinking=True,
             supports_system_prompts=True,
             supports_streaming=True,
             supports_function_calling=True,
             supports_json_mode=True,
             description="Fully featured test model",
+            temperature_constraint=create_temperature_constraint("range"),
         )
-
-        caps = config.to_capabilities()
         assert caps.context_window == 128000
         assert caps.supports_extended_thinking
         assert caps.supports_system_prompts
