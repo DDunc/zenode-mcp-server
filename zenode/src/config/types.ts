@@ -51,6 +51,13 @@ export interface ModelsConfig {
   };
 }
 
+export interface SecurityConfig {
+  /** Whether to enforce workspace path restrictions (legacy feature) */
+  enforceWorkspaceRestrictions: boolean;
+  /** Workspace root path (only used if enforceWorkspaceRestrictions is true) */
+  workspaceRoot?: string;
+}
+
 export interface ZenodeConfig {
   /** Logging configuration */
   logging: LoggingConfig;
@@ -60,6 +67,8 @@ export interface ZenodeConfig {
   server: ServerConfig;
   /** Local models configuration */
   models: ModelsConfig;
+  /** Security configuration */
+  security: SecurityConfig;
   /** Config file version for migration support */
   version: string;
 }
@@ -89,6 +98,12 @@ export const DEFAULT_CONFIG: ZenodeConfig = {
       modelName: 'qwen2.5:0.5b',
       modelSrcUrl: 'https://ollama.com/library/qwen2.5:0.5b'
     }
+  },
+  security: {
+    // DISABLED by default - enables direct path mapping without workspace restrictions
+    enforceWorkspaceRestrictions: false,
+    // Only used if enforceWorkspaceRestrictions is true
+    workspaceRoot: process.env.MCP_WORKSPACE || process.cwd()
   },
   version: '1.0.0'
 };

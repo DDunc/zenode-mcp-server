@@ -163,7 +163,7 @@ export abstract class BaseTool {
 
     try {
       const { createClient } = await import('redis');
-      const redisClient = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6379' });
+      const redisClient = createClient({ url: process.env.REDIS_URL || 'redis://localhost:6380' });
       await redisClient.connect();
 
       let contextThreads: string[] = [];
@@ -576,8 +576,9 @@ Please reference this context when relevant to provide better assistance.`;
 
     // Fallback hierarchy - try Claude Sonnet variants first, then others
     const fallbackModels = [
-      'anthropic/claude-3-sonnet',
       'anthropic/claude-3.5-sonnet',
+      'anthropic/claude-3.7-sonnet',
+      'anthropic/claude-3-sonnet',
       'anthropic/claude-3-haiku',
       'pro',
       'gemini-2.5-pro-preview-06-05',
@@ -787,7 +788,7 @@ Please reference this context when relevant to provide better assistance.`;
   }
 
   /**
-   * Read files with security checks
+   * Read files with security checks and auto-directory traversal
    */
   protected async readFilesSecurely(filePaths: string[]): Promise<Record<string, string>> {
     const fileContents: Record<string, string> = {};
@@ -804,6 +805,42 @@ Please reference this context when relevant to provide better assistance.`;
     }
     
     return fileContents;
+  }
+
+  /**
+   * Smart file resolution with directory traversal and default project detection
+   */
+  protected async resolveAndReadFiles(
+    inputPaths: string[] | undefined,
+    customConfig?: Partial<import('../utils/file-discovery.js').FileDiscoveryConfig>
+  ): Promise<{
+    fileContents: Record<string, string>;
+    discoveryInfo: {
+      summary: string;
+      usedDefaultPath: boolean;
+      totalFilesFound: number;
+    };
+  }> {
+    const { resolveFilePaths } = await import('../utils/file-discovery.js');
+    
+    // Resolve paths (handles directories and defaults to project root)
+    const { files, summary, usedDefaultPath } = await resolveFilePaths(
+      inputPaths,
+      this.name,
+      customConfig
+    );
+    
+    // Read the discovered files
+    const fileContents = await this.readFilesSecurely(files);
+    
+    return {
+      fileContents,
+      discoveryInfo: {
+        summary,
+        usedDefaultPath,
+        totalFilesFound: files.length,
+      },
+    };
   }
 
   /**

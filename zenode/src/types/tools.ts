@@ -117,7 +117,7 @@ export interface DebugRequest extends ToolRequest {
 }
 
 export interface AnalyzeRequest extends ToolRequest {
-  files: string[];
+  files?: string[];
   prompt: string;
   analysis_type?: 'architecture' | 'performance' | 'security' | 'quality' | 'general';
   output_format?: 'summary' | 'detailed' | 'actionable';

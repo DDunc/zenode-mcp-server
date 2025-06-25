@@ -127,7 +127,7 @@ export const MCP_PROMPT_SIZE_LIMIT = 50_000; // 50K characters
 // Threading configuration
 // Simple Redis-based conversation threading for stateless MCP environment
 // Set REDIS_URL environment variable to connect to your Redis instance
-export const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379/0';
+export const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6380/0';
 
 // Environment configuration
 export const NODE_ENV = process.env.NODE_ENV || 'development';

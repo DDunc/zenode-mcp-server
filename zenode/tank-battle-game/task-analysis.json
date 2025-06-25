@@ -1,0 +1,66 @@
+{
+  "components": [
+    {
+      "name": "TankDeathMatchScene",
+      "type": "scene",
+      "description": "Main tank deathmatch game scene",
+      "filename": "src/scenes/TankDeathMatchScene.ts"
+    },
+    {
+      "name": "Tank",
+      "type": "entity",
+      "description": "Tank entity with movement and shooting",
+      "filename": "src/entities/Tank.ts"
+    },
+    {
+      "name": "AITank",
+      "type": "entity",
+      "description": "AI-controlled tank opponent",
+      "filename": "src/entities/AITank.ts"
+    },
+    {
+      "name": "Bullet",
+      "type": "entity",
+      "description": "Bullet projectile system",
+      "filename": "src/entities/Bullet.ts"
+    },
+    {
+      "name": "GameMain",
+      "type": "main",
+      "description": "Main game configuration",
+      "filename": "src/main.ts"
+    }
+  ],
+  "dependencies": [
+    "phaser",
+    "typescript",
+    "vite"
+  ],
+  "structure": {
+    "src": [
+      "main.ts",
+      "scenes/",
+      "entities/"
+    ],
+    "public": [
+      "assets/"
+    ],
+    "root": [
+      "index.html",
+      "package.json",
+      "vite.config.ts"
+    ]
+  },
+  "features": [
+    "multiple levels",
+    "player movement",
+    "platforms",
+    "physics",
+    "responsive controls"
+  ],
+  "testStrategy": [
+    "unit tests",
+    "integration tests",
+    "manual testing"
+  ]
+}

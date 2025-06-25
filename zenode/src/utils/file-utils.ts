@@ -6,6 +6,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { constants } from 'fs';
 import { MCP_WORKSPACE } from '../config.js';
+import { configLoader } from '../config/loader.js';
 import { logger } from './logger.js';
 
 /**
@@ -45,14 +46,26 @@ export function translatePathForEnvironment(filePath: string): string {
 }
 
 /**
- * Check if a path is safe (within workspace)
+ * Check if a path is safe (configurable workspace restrictions)
  */
 export function isPathSafe(filePath: string): boolean {
-  const resolvedPath = path.resolve(filePath);
-  const workspacePath = path.resolve(MCP_WORKSPACE);
+  // Get security configuration
+  const securityConfig = configLoader.getSecurityConfig();
   
-  // Check if the resolved path is within the workspace
-  return resolvedPath.startsWith(workspacePath);
+  // If workspace restrictions are disabled, allow all paths
+  if (!securityConfig.enforceWorkspaceRestrictions) {
+    logger.debug(`Path access allowed (workspace restrictions disabled): ${filePath}`);
+    return true;
+  }
+  
+  // Legacy workspace restriction logic (only when enabled)
+  const resolvedPath = path.resolve(filePath);
+  const workspacePath = path.resolve(securityConfig.workspaceRoot || MCP_WORKSPACE);
+  
+  const isWithinWorkspace = resolvedPath.startsWith(workspacePath);
+  logger.debug(`Path security check: ${filePath} -> ${resolvedPath} (workspace: ${workspacePath}, allowed: ${isWithinWorkspace})`);
+  
+  return isWithinWorkspace;
 }
 
 /**

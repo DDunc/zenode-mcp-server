@@ -119,7 +119,10 @@
       "mcp__zenode-docker__version",
       "Bash(claude:*)",
       "Bash(grep -n \"workspace\" /Users/edunc/Documents/gitz/zen-mcp-server/zenode/dist/utils/file-utils.js)",
-      "Bash(diff:*)"
+      "Bash(diff:*)",
+      "Bash(./docker-build.sh:*)",
+      "Bash(npm run start:mcp:*)",
+      "mcp__zenode-docker__listmodels"
     ],
     "deny": []
   }

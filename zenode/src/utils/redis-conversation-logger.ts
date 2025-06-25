@@ -485,7 +485,7 @@ logger: "redis-conversation-logger"
 // Create singleton instance - check for Redis disable flags
 const isRedisEnabled = process.env.DISABLE_ALL_REDIS !== 'true';
 export const redisConversationLogger = new RedisConversationLogger(
-  process.env.REDIS_URL || 'redis://redis:6379/0',
+  process.env.REDIS_URL || 'redis://localhost:6380/0',
   './conversation-logs', 
   isRedisEnabled
 );

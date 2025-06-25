@@ -94,6 +94,7 @@ export class ConfigLoader {
       shortcuts: { ...defaults.shortcuts, ...userConfig.shortcuts },
       server: { ...defaults.server, ...userConfig.server },
       models: { ...defaults.models, ...userConfig.models },
+      security: { ...defaults.security, ...userConfig.security },
       version: userConfig.version || defaults.version
     };
   }
@@ -131,6 +132,10 @@ export class ConfigLoader {
 
   getServerConfig() {
     return { ...this.config.server };
+  }
+
+  getSecurityConfig() {
+    return { ...this.config.security };
   }
 
   /**

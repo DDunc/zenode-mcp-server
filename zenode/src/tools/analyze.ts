@@ -38,7 +38,7 @@ import { modelProviderRegistry } from '../providers/registry.js';
  * Request validation schema
  */
 const AnalyzeRequestSchema = BaseToolRequestSchema.extend({
-  files: z.array(z.string()),
+  files: z.array(z.string()).optional(),
   prompt: z.string(),
   analysis_type: AnalysisTypeSchema.optional(),
   output_format: OutputFormatSchema.default('detailed'),
@@ -72,7 +72,7 @@ export class AnalyzeTool extends BaseTool {
       // Validate request using the base method
       const validatedRequest = this.validateArgs<z.infer<typeof AnalyzeRequestSchema>>(args);
       logger.debug('Analyze request validated', { 
-        files: validatedRequest.files.length,
+        files: validatedRequest.files?.length || 0,
         analysisType: validatedRequest.analysis_type || 'general',
         outputFormat: validatedRequest.output_format,
       });
@@ -81,6 +81,12 @@ export class AnalyzeTool extends BaseTool {
       const sizeCheck = checkPromptSize(validatedRequest.prompt, 'prompt');
       if (sizeCheck) {
         return sizeCheck;
+      }
+
+      // Check if auto-discovery would be triggered
+      const usedAutoDiscovery = !validatedRequest.files || validatedRequest.files.length === 0;
+      if (usedAutoDiscovery) {
+        logger.info('Auto-discovery triggered - will provide friendly intro message');
       }
       
       // Prepare the prompt
@@ -119,7 +125,7 @@ export class AnalyzeTool extends BaseTool {
       // Generate response from AI
       const response = await provider.generateResponse(modelRequest);
       
-      const formattedResponse = this.formatResponse(response.content, validatedRequest);
+      const formattedResponse = this.formatResponse(response.content, validatedRequest, usedAutoDiscovery);
       
       // Handle conversation threading with file tracking
       const continuationOffer = await this.handleConversationThreading(
@@ -165,8 +171,8 @@ export class AnalyzeTool extends BaseTool {
   }
   
   private async preparePrompt(request: AnalyzeRequest): Promise<string> {
-    // Read all files
-    const fileContents = await this.readFilesSecurely(request.files);
+    // Use smart file resolution with directory traversal
+    const { fileContents, discoveryInfo } = await this.resolveAndReadFiles(request.files);
     
     // Format file content
     const formattedFiles = Object.entries(fileContents)
@@ -175,6 +181,11 @@ export class AnalyzeTool extends BaseTool {
     
     // Build analysis instructions
     const analysisFocus = this.buildAnalysisFocus(request);
+    
+    // Add file discovery info if useful
+    const discoveryContext = discoveryInfo.usedDefaultPath 
+      ? `\n📁 Auto-discovered files: ${discoveryInfo.summary}`
+      : `📁 File discovery: ${discoveryInfo.summary}`;
     
     // Add web search instruction if enabled
     const websearchInstruction = buildWebSearchInstruction(
@@ -192,6 +203,8 @@ export class AnalyzeTool extends BaseTool {
 === USER QUESTION ===
 ${request.prompt}
 === END QUESTION ===
+
+${discoveryContext}
 
 === FILES TO ANALYZE ===
 ${formattedFiles}
@@ -233,12 +246,21 @@ Please analyze these files to answer the user's question.`;
     return parts.filter(p => p).join('\n');
   }
   
-  private formatResponse(response: string, request: AnalyzeRequest): string {
+  private formatResponse(response: string, request: AnalyzeRequest, usedAutoDiscovery: boolean = false): string {
+    let formattedResponse = response;
+    
+    // Add friendly intro message if auto-discovery was used
+    if (usedAutoDiscovery) {
+      formattedResponse = `I'm going to take a look around the ol' filesystem, let me know if everything looks right to you.
+
+${response}`;
+    }
+    
     const nextSteps = 'Use this analysis to actively continue your task. ' +
       'Investigate deeper into any findings, implement solutions based on these insights, ' +
       'and carry out the necessary work. Only pause to ask the user if you need their ' +
       'explicit approval for major changes or if critical decisions require their input.';
     
-    return formatResponseWithNextSteps(response, nextSteps);
+    return formatResponseWithNextSteps(formattedResponse, nextSteps);
   }
 }

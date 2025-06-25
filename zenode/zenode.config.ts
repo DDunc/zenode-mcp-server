@@ -59,6 +59,15 @@ const config: ZenodeConfig = {
       // Ollama model reference URL
       modelSrcUrl: 'https://ollama.com/library/qwen2.5:0.5b'
     }
+  },
+  
+  security: {
+    // WORKSPACE RESTRICTIONS: Set to false for direct path mapping (recommended)
+    // Set to true to enable legacy workspace boundary enforcement
+    enforceWorkspaceRestrictions: false,
+    
+    // Only used if enforceWorkspaceRestrictions is true
+    // workspaceRoot: '/custom/workspace/path'
   }
 };
 

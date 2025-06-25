@@ -150,7 +150,20 @@ export class OpenRouterProvider extends BaseModelProvider {
       supportsSystemPrompts: true,
       supportsStreaming: false,
       supportsFunctionCalling: true,
-      supportsJsonMode: false,
+      supportsJsonMode: true,
+      temperatureConstraint: new RangeTemperatureConstraint(0, 1, 0.7),
+    });
+
+    this.modelCapabilities.set('anthropic/claude-3.7-sonnet', {
+      provider: this.type,
+      modelName: 'anthropic/claude-3.7-sonnet',
+      friendlyName: 'Claude 3.7 Sonnet (via OpenRouter)',
+      contextWindow: 200000,
+      supportsExtendedThinking: true,
+      supportsSystemPrompts: true,
+      supportsStreaming: false,
+      supportsFunctionCalling: true,
+      supportsJsonMode: true,
       temperatureConstraint: new RangeTemperatureConstraint(0, 1, 0.7),
     });
 
@@ -170,6 +183,8 @@ export class OpenRouterProvider extends BaseModelProvider {
 
     // Add aliases for easier access
     this.modelAliases.set('sonnet', 'anthropic/claude-3.5-sonnet');
+    this.modelAliases.set('sonnet35', 'anthropic/claude-3.5-sonnet');
+    this.modelAliases.set('sonnet37', 'anthropic/claude-3.7-sonnet');
     this.modelAliases.set('haiku', 'anthropic/claude-3-haiku');
     
     // Add Opus only if explicitly enabled via config
@@ -383,7 +398,12 @@ export class OpenRouterProvider extends BaseModelProvider {
         maxImageSizeMB: 5,
         supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
       }],
-      ['anthropic/claude-sonnet-4-20250514', {
+      ['anthropic/claude-3.5-sonnet', {
+        supportsImages: true,
+        maxImageSizeMB: 5,
+        supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
+      }],
+      ['anthropic/claude-3.7-sonnet', {
         supportsImages: true,
         maxImageSizeMB: 5,
         supportedFormats: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],

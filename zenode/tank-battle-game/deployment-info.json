@@ -1,0 +1,16 @@
+{
+  "port": null,
+  "startTime": 1750823810934,
+  "workerId": "demo",
+  "files": [
+    "package.json",
+    "index.html",
+    "src/scenes/TankDeathMatchScene.ts",
+    "src/entities/Tank.ts",
+    "src/entities/AITank.ts",
+    "src/entities/Bullet.ts",
+    "src/main.ts",
+    "vite.config.ts",
+    "src/style.css"
+  ]
+}

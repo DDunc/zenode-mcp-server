@@ -349,9 +349,10 @@ export class ModelProviderRegistry {
     }
 
     if (OPENROUTER_API_KEY && OPENROUTER_API_KEY !== 'your_openrouter_api_key_here') {
-      // Add default OpenRouter models for auto mode validation (prioritize Claude Sonnet)
+      // Add default OpenRouter models for auto mode validation (prioritize Claude 3.5 Sonnet)
       const openrouterModels = [
         'anthropic/claude-3.5-sonnet',
+        'anthropic/claude-3.7-sonnet',
         'anthropic/claude-3-sonnet', 
         'anthropic/claude-3-haiku',
         'google/gemini-2.5-flash',
